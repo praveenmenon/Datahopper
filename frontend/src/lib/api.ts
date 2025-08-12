@@ -156,7 +156,7 @@ export const environmentsApi = {
 // Request Runner API
 export const runnerApi = {
   run: (data: RunRequest): Promise<RunResponse> =>
-    apiRequest('/api/request/run', {
+    apiRequest('/api/run', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

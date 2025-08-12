@@ -7,15 +7,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/datahopper/backend/internal/dotpath"
 	"github.com/datahopper/backend/internal/interpolate"
 	"github.com/datahopper/backend/internal/registry"
+	"github.com/datahopper/backend/internal/types"
 	"github.com/rs/zerolog"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
@@ -94,7 +97,16 @@ func (s *Service) buildRequestContext(req *RunReq) (*RequestContext, error) {
 
 	// Encode body as Protobuf if specified
 	if req.ProtoMessage != "" && body != nil {
-		encodedBody, err := s.encodeProtobufBody(req.ProtoMessage, body)
+		// Log the body structure for debugging
+		if bodyMap, ok := body.(map[string]interface{}); ok {
+			bodyJSON, _ := json.MarshalIndent(bodyMap, "", "  ")
+			s.logger.Debug().
+				Str("messageType", req.ProtoMessage).
+				Str("body", string(bodyJSON)).
+				Msg("Building protobuf body")
+		}
+		
+		encodedBody, err := s.encodeProtobufBody(req.ProtoMessage, body, req.Body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode protobuf body: %w", err)
 		}
@@ -136,28 +148,33 @@ func (s *Service) buildRequestContext(req *RunReq) (*RequestContext, error) {
 }
 
 // encodeProtobufBody encodes a JSON body as Protobuf
-func (s *Service) encodeProtobufBody(messageType string, body interface{}) ([]byte, error) {
+func (s *Service) encodeProtobufBody(messageType string, body interface{}, originalFields []types.BodyField) ([]byte, error) {
 	// Get message descriptor
 	msgDesc, err := s.registry.GetMessageDescriptor(messageType)
 	if err != nil {
 		return nil, fmt.Errorf("message descriptor not found: %s", messageType)
 	}
 
+	// Clean up the body to handle potential oneof conflicts using the descriptor and original field order
+	cleanedBody := s.cleanBodyForProtobufWithDescriptor(msgDesc, body, originalFields)
+
 	// Create dynamic message
 	dynamicMsg := dynamicpb.NewMessage(msgDesc)
 
-	// Convert body to JSON bytes
-	jsonBytes, err := json.Marshal(body)
+	// Convert cleaned body to JSON bytes
+	jsonBytes, err := json.Marshal(cleanedBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal body to JSON: %w", err)
 	}
 
-	// Unmarshal JSON into dynamic message
+	// Unmarshal JSON into dynamic message with more permissive options
 	unmarshalOpts := protojson.UnmarshalOptions{
-		DiscardUnknown: false,
+		DiscardUnknown: true, // Allow unknown fields
+		AllowPartial:   true, // Allow partial messages
 	}
 	if err := unmarshalOpts.Unmarshal(jsonBytes, dynamicMsg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON into protobuf: %w", err)
+		// If unmarshaling fails, try to provide a more helpful error
+		return nil, fmt.Errorf("failed to unmarshal JSON into protobuf: %w. This often happens when conflicting values are set for oneof fields or when required fields are missing", err)
 	}
 
 	// Marshal to protobuf bytes
@@ -166,7 +183,122 @@ func (s *Service) encodeProtobufBody(messageType string, body interface{}) ([]by
 		return nil, fmt.Errorf("failed to marshal protobuf: %w", err)
 	}
 
-	return protoBytes, nil
+return protoBytes, nil
+}
+
+// cleanBodyForProtobufWithDescriptor cleans up the body to handle potential oneof conflicts
+// by pruning multiple members of the same oneof, keeping the last-set one based on the
+// order of original dot-path fields.
+func (s *Service) cleanBodyForProtobufWithDescriptor(md protoreflect.MessageDescriptor, body interface{}, originalFields []types.BodyField) interface{} {
+	if bodyMap, ok := body.(map[string]interface{}); ok {
+		cleaned := make(map[string]interface{})
+		
+		// Process fields in a deterministic order to handle conflicts
+		keys := make([]string, 0, len(bodyMap))
+		for k := range bodyMap {
+			keys = append(keys, k)
+		}
+		// Sort keys for deterministic processing
+		sort.Strings(keys)
+		
+		// First copy as-is
+		for _, key := range keys {
+			cleaned[key] = bodyMap[key]
+		}
+
+		// Prune oneof conflicts at this level
+		pruneOneofConflicts(md, cleaned, "", originalFields)
+
+		// Recurse into nested message fields
+		for i := 0; i < md.Fields().Len(); i++ {
+			fd := md.Fields().Get(i)
+			jsonName := fd.JSONName()
+			val, exists := cleaned[jsonName]
+			if !exists {
+				continue
+			}
+			if fd.Kind() == protoreflect.MessageKind {
+				childMd := fd.Message()
+				// Map value
+				if childMap, ok := val.(map[string]interface{}); ok {
+					cleaned[jsonName] = s.cleanBodyForProtobufWithDescriptor(childMd, childMap, originalFields)
+				} else if arr, ok := val.([]interface{}); ok {
+					// Recurse for each element if it's a map
+					for idx, item := range arr {
+						if itemMap, ok := item.(map[string]interface{}); ok {
+							arr[idx] = s.cleanBodyForProtobufWithDescriptor(childMd, itemMap, originalFields)
+						}
+					}
+					cleaned[jsonName] = arr
+				}
+			}
+		}
+		
+		return cleaned
+	}
+	
+	return body
+}
+
+// pruneOneofConflicts removes conflicting oneof members from the given map, keeping the last-set one
+// based on the order in originalFields.
+func pruneOneofConflicts(md protoreflect.MessageDescriptor, m map[string]interface{}, basePath string, originalFields []types.BodyField) {
+	// Build a quick path order index for lookup
+	orderedPaths := make([]string, len(originalFields))
+	for i, bf := range originalFields {
+		orderedPaths[i] = bf.Path
+	}
+
+	// For each oneof, find present members and keep the last one
+	for i := 0; i < md.Oneofs().Len(); i++ {
+		od := md.Oneofs().Get(i)
+		present := make([]string, 0)
+		for j := 0; j < od.Fields().Len(); j++ {
+			fd := od.Fields().Get(j)
+			jsonName := fd.JSONName()
+			if _, exists := m[jsonName]; exists {
+				present = append(present, jsonName)
+			}
+		}
+		if len(present) <= 1 {
+			continue
+		}
+
+		// Determine which to keep based on latest occurrence in originalPaths
+		keepKey := present[0]
+		keepIdx := -1
+		for _, key := range present {
+			candidatePrefix := joinPath(basePath, key)
+			idx := lastIndexWithPrefix(orderedPaths, candidatePrefix)
+			if idx > keepIdx {
+				keepIdx = idx
+				keepKey = key
+			}
+		}
+
+		for _, key := range present {
+			if key != keepKey {
+				delete(m, key)
+			}
+		}
+	}
+}
+
+func joinPath(base, key string) string {
+	if base == "" {
+		return key
+	}
+	return base + "." + key
+}
+
+func lastIndexWithPrefix(paths []string, prefix string) int {
+	last := -1
+	for i, p := range paths {
+		if strings.HasPrefix(p, prefix) {
+			last = i
+		}
+	}
+	return last
 }
 
 // executeRequest executes the HTTP request

@@ -231,8 +231,7 @@ func (s *Service) GetMessageDescriptor(fqn string) (protoreflect.MessageDescript
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// For now, we'll search through all files manually
-	// In a more sophisticated implementation, we could build an index
+	// First: search existing protoregistry
 	var foundMsg protoreflect.MessageDescriptor
 	s.files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		messages := fd.Messages()
@@ -246,12 +245,64 @@ func (s *Service) GetMessageDescriptor(fqn string) (protoreflect.MessageDescript
 		}
 		return true
 	})
-
-	if foundMsg == nil {
-		return nil, fmt.Errorf("message not found: %s", fqn)
+	if foundMsg != nil {
+		return foundMsg, nil
 	}
 
-	return foundMsg, nil
+	// Fallback: search descFiles by converting to protoreflect using a composite resolver
+	if len(s.descFiles) > 0 {
+		resolver := compositeResolver{primary: s.files, fallback: protoregistry.GlobalFiles}
+		for _, dfile := range s.descFiles {
+			protoFD := dfile.AsFileDescriptorProto()
+			if protoFD == nil {
+				continue
+			}
+			fileDesc, err := protodesc.NewFile(protoFD, resolver)
+			if err != nil {
+				continue
+			}
+			messages := fileDesc.Messages()
+			for i := 0; i < messages.Len(); i++ {
+				msg := messages.Get(i)
+				fullName := string(fileDesc.Package()) + "." + string(msg.Name())
+				if fullName == fqn {
+					return msg, nil
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("message not found: %s", fqn)
+}
+
+// compositeResolver checks the current registry first, then the global files
+type compositeResolver struct {
+	primary  *protoregistry.Files
+	fallback *protoregistry.Files
+}
+
+func (r compositeResolver) FindFileByPath(path string) (protoreflect.FileDescriptor, error) {
+	if r.primary != nil {
+		if fd, err := r.primary.FindFileByPath(path); err == nil {
+			return fd, nil
+		}
+	}
+	if r.fallback != nil {
+		return r.fallback.FindFileByPath(path)
+	}
+	return nil, protoregistry.NotFound
+}
+
+func (r compositeResolver) FindDescriptorByName(name protoreflect.FullName) (protoreflect.Descriptor, error) {
+	if r.primary != nil {
+		if d, err := r.primary.FindDescriptorByName(name); err == nil {
+			return d, nil
+		}
+	}
+	if r.fallback != nil {
+		return r.fallback.FindDescriptorByName(name)
+	}
+	return nil, protoregistry.NotFound
 }
 
 // GetMessageFields returns field information for a message by FQN
@@ -259,28 +310,48 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// First, search through descFiles (protoparse descriptors from virtual filesystem)
+	// Search through descFiles (protoparse descriptors from virtual filesystem) for immediate fields
 	if len(s.descFiles) > 0 {
 		for _, fd := range s.descFiles {
-			// Get package name
 			packageName := fd.GetPackage()
 			if packageName == "" {
 				packageName = "default"
 			}
-
-			// Get all message types
 			messages := fd.GetMessageTypes()
 			for _, msg := range messages {
 				msgFqn := fmt.Sprintf("%s.%s", packageName, msg.GetName())
 				if msgFqn == fqn {
-					// Extract comprehensive field information including nested fields
-					return s.extractComprehensiveFields(msg, "", make(map[string]bool))
+					fields := make([]map[string]interface{}, 0)
+					for _, field := range msg.GetFields() {
+						fi := map[string]interface{}{
+							"name":     field.GetName(),
+							"number":   field.GetNumber(),
+							"type":     field.GetType().String(),
+							"repeated": field.IsRepeated(),
+							"optional": field.IsRepeated() || field.GetType().String() == "message",
+							"message":  field.GetMessageType() != nil,
+						}
+						if field.GetMessageType() != nil {
+							fi["messageType"] = field.GetMessageType().GetFullyQualifiedName()
+						}
+						if enumDesc := field.GetEnumType(); enumDesc != nil {
+							fi["enum"] = true
+							vals := enumDesc.GetValues()
+							enumNames := make([]string, 0, len(vals))
+							for _, v := range vals {
+								enumNames = append(enumNames, v.GetName())
+							}
+							fi["enumValues"] = enumNames
+						}
+						fields = append(fields, fi)
+					}
+					return fields, nil
 				}
 			}
 		}
 	}
 
-	// Fallback to protoregistry approach
+	// Fallback to protoregistry approach for immediate fields
 	var foundMsg protoreflect.MessageDescriptor
 	s.files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		messages := fd.Messages()
@@ -289,15 +360,40 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 			fullName := string(fd.Package()) + "." + string(msg.Name())
 			if fullName == fqn {
 				foundMsg = msg
-				return false // stop iteration
+				return false
 			}
 		}
 		return true
 	})
 
 	if foundMsg != nil {
-		// Extract comprehensive field information including nested fields
-		return s.extractComprehensiveFieldsFromProtoreflect(foundMsg, "", make(map[string]bool))
+		fields := make([]map[string]interface{}, 0)
+		msgFields := foundMsg.Fields()
+		for i := 0; i < msgFields.Len(); i++ {
+			fd := msgFields.Get(i)
+			fi := map[string]interface{}{
+				"name":     string(fd.Name()),
+				"number":   int32(fd.Number()),
+				"type":     string(fd.Kind()),
+				"repeated": fd.IsList(),
+				"optional": fd.HasPresence(),
+				"message":  fd.Message() != nil,
+			}
+			if fd.Message() != nil {
+				fi["messageType"] = string(fd.Message().FullName())
+			}
+			if enumDesc := fd.Enum(); enumDesc != nil {
+				fi["enum"] = true
+				vals := enumDesc.Values()
+				enumNames := make([]string, 0, vals.Len())
+				for j := 0; j < vals.Len(); j++ {
+					enumNames = append(enumNames, string(vals.Get(j).Name()))
+				}
+				fi["enumValues"] = enumNames
+			}
+			fields = append(fields, fi)
+		}
+		return fields, nil
 	}
 
 	return nil, fmt.Errorf("message not found: %s", fqn)
@@ -377,6 +473,17 @@ func (s *Service) extractComprehensiveFields(msg *desc.MessageDescriptor, prefix
 			"message":  field.GetMessageType() != nil,
 		}
 		
+		// Enum metadata
+		if enumDesc := field.GetEnumType(); enumDesc != nil {
+			fieldInfo["enum"] = true
+			vals := enumDesc.GetValues()
+			enumNames := make([]string, 0, len(vals))
+			for _, v := range vals {
+				enumNames = append(enumNames, v.GetName())
+			}
+			fieldInfo["enumValues"] = enumNames
+		}
+		
 		// Add message type if it's a message field
 		if field.GetMessageType() != nil {
 			fieldInfo["messageType"] = field.GetMessageType().GetFullyQualifiedName()
@@ -423,6 +530,17 @@ func (s *Service) extractComprehensiveFieldsFromProtoreflect(msg protoreflect.Me
 			"repeated": fd.IsList(),
 			"optional": fd.HasPresence(),
 			"message":  fd.Message() != nil,
+		}
+		
+		// Enum metadata
+		if enumDesc := fd.Enum(); enumDesc != nil {
+			fieldInfo["enum"] = true
+			vals := enumDesc.Values()
+			enumNames := make([]string, 0, vals.Len())
+			for j := 0; j < vals.Len(); j++ {
+				enumNames = append(enumNames, string(vals.Get(j).Name()))
+			}
+			fieldInfo["enumValues"] = enumNames
 		}
 		
 		// Add message type if it's a message field

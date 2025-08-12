@@ -1,10 +1,11 @@
 package dotpath
 
 import (
-	"fmt"
-	"regexp"
-	"strconv"
-	"strings"
+    "encoding/json"
+    "fmt"
+    "regexp"
+    "strconv"
+    "strings"
 )
 
 var arrayIndexRegex = regexp.MustCompile(`^(\w+)\[(\d+)\]$`)
@@ -200,18 +201,68 @@ func getArrayValue(current map[string]interface{}, part string) (interface{}, er
 func BuildFromFields(fields []interface{}) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 	
+	// Track all paths to detect potential conflicts
+	paths := make(map[string]interface{})
+	
 	for _, field := range fields {
 		if bodyField, ok := field.(map[string]interface{}); ok {
 			path, pathOk := bodyField["path"].(string)
 			value, valueOk := bodyField["value"]
 			
 			if pathOk && valueOk {
-				if err := SetByPath(result, path, value); err != nil {
-					return nil, fmt.Errorf("failed to set %s: %w", path, err)
+                // Coerce common literal types from strings (bool, number, null, JSON objects/arrays)
+                value = coerceValue(value)
+				// Check for potential conflicts with existing paths
+				if _, exists := paths[path]; exists {
+					// If the same path is set multiple times, use the last value
+					// This helps with oneof field conflicts
+					if err := SetByPath(result, path, value); err != nil {
+						return nil, fmt.Errorf("failed to set %s: %w", path, err)
+					}
+					paths[path] = value
+				} else {
+					if err := SetByPath(result, path, value); err != nil {
+						return nil, fmt.Errorf("failed to set %s: %w", path, err)
+					}
+					paths[path] = value
 				}
 			}
 		}
 	}
 	
 	return result, nil
+}
+
+// coerceValue attempts to convert string inputs into appropriate JSON-native types
+// - "true"/"false" -> bool
+// - numeric strings -> float64 (JSON number)
+// - "null" -> nil
+// - JSON objects/arrays -> map[string]interface{} / []interface{}
+// Otherwise returns the original value
+func coerceValue(val interface{}) interface{} {
+    s, ok := val.(string)
+    if !ok {
+        return val
+    }
+    str := strings.TrimSpace(s)
+    if str == "" {
+        return s
+    }
+
+    // Fast path for objects/arrays
+    if strings.HasPrefix(str, "{") || strings.HasPrefix(str, "[") {
+        var v interface{}
+        if err := json.Unmarshal([]byte(str), &v); err == nil {
+            return v
+        }
+        return s
+    }
+
+    // Try to parse as a JSON literal (bool/number/null or quoted string)
+    var v interface{}
+    if err := json.Unmarshal([]byte(str), &v); err == nil {
+        return v
+    }
+
+    return s
 }

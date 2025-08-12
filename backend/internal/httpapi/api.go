@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -306,11 +307,13 @@ func (api *API) getMessageFields(c *gin.Context) {
 		return
 	}
 
-	// Get comprehensive message fields including nested ones
-	fields, err := api.registry.GetComprehensiveMessageFields(fqn)
+	// Build flattened list of fields including nested paths
+	visited := make(map[string]bool)
+	collected := make(map[string]bool)
+	fields, err := api.flattenMessageFields(fqn, "", visited, 0, collected)
 	if err != nil {
-		api.logger.Error().Err(err).Str("fqn", fqn).Msg("Failed to get comprehensive message fields")
-		c.JSON(http.StatusNotFound, gin.H{"error": "Message not found"})
+		api.logger.Error().Err(err).Str("fqn", fqn).Msg("Failed to flatten message fields")
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -318,6 +321,85 @@ func (api *API) getMessageFields(c *gin.Context) {
 		"fqn":    fqn,
 		"fields": fields,
 	})
+}
+
+// flattenMessageFields recursively flattens fields of a message into dot-paths using registry immediate fields
+func (api *API) flattenMessageFields(fqn string, prefix string, visited map[string]bool, depth int, collected map[string]bool) ([]gin.H, error) {
+	// Guard against deep or cyclic graphs
+	if depth > 20 {
+		return nil, fmt.Errorf("max nesting depth exceeded for %s", fqn)
+	}
+	key := prefix + "|" + fqn
+	if visited[key] {
+		return []gin.H{}, nil
+	}
+	visited[key] = true
+
+	immediate, err := api.registry.GetMessageFields(fqn)
+	if err != nil {
+		// Only bubble up for the root; for nested, treat as leaf
+		if depth == 0 {
+			return nil, fmt.Errorf("message not found: %s", fqn)
+		}
+		return []gin.H{}, nil
+	}
+
+	var out []gin.H
+	for _, raw := range immediate {
+		name, _ := raw["name"].(string)
+		path := name
+		if prefix != "" {
+			path = prefix + "." + name
+		}
+		typ, _ := raw["type"].(string)
+		repeated, _ := raw["repeated"].(bool)
+		optional, _ := raw["optional"].(bool)
+		isMsg, _ := raw["message"].(bool)
+		msgType, _ := raw["messageType"].(string)
+
+		// Recurse into messages; do not emit a separate container entry to avoid duplicates
+		if isMsg && msgType != "" && !strings.HasPrefix(msgType, "google.") {
+			nested, nerr := api.flattenMessageFields(msgType, path, visited, depth+1, collected)
+			if nerr == nil {
+				out = append(out, nested...)
+			}
+			continue
+		}
+
+		// Deduplicate by full path
+		if collected[path] {
+			continue
+		}
+		collected[path] = true
+
+		entry := gin.H{
+			"path":     path,
+			"name":     name,
+			"type":     typ,
+			"repeated": repeated,
+			"optional": optional,
+			"message":  isMsg,
+		}
+		if msgType != "" {
+			entry["messageType"] = msgType
+		}
+		if enumFlag, ok := raw["enum"].(bool); ok && enumFlag {
+			entry["enum"] = true
+			if ev, ok := raw["enumValues"].([]string); ok {
+				entry["enumValues"] = ev
+			} else if ia, ok := raw["enumValues"].([]interface{}); ok {
+				vals := make([]string, 0, len(ia))
+				for _, v := range ia {
+					if s, ok := v.(string); ok {
+						vals = append(vals, s)
+					}
+				}
+				entry["enumValues"] = vals
+			}
+		}
+		out = append(out, entry)
+	}
+	return out, nil
 }
 
 // Collections

@@ -58,12 +58,44 @@ const FieldInput: React.FC<{
   value: string;
   onChange: (v: string) => void;
 }> = ({ field, value, onChange }) => {
+  // Special-case Timestamp: expect JSON object {seconds,nanos}
+  if (field.message && field.messageType && field.messageType.includes('google.protobuf.Timestamp')) {
+    let seconds = 0;
+    let nanos = 0;
+    try {
+      if (value && value.trim().length > 0) {
+        const obj = JSON.parse(value);
+        seconds = Number(obj.seconds) || 0;
+        nanos = Number(obj.nanos) || 0;
+      }
+    } catch (_) {}
+    return (
+      <div className="flex items-center space-x-2">
+        <input
+          type="number"
+          value={seconds}
+          onChange={(e) => onChange(JSON.stringify({ seconds: Number(e.target.value) || 0, nanos }))}
+          placeholder="seconds"
+          className="w-28 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        />
+        <input
+          type="number"
+          value={nanos}
+          onChange={(e) => onChange(JSON.stringify({ seconds, nanos: Number(e.target.value) || 0 }))}
+          placeholder="nanos"
+          className="w-24 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        />
+      </div>
+    );
+  }
+
   // Enum dropdown
   if ((field as any).enum && Array.isArray((field as any).enumValues)) {
     const opts = (field as any).enumValues as string[];
+    const current = value && opts.includes(value) ? value : (opts[0] || '');
     return (
       <select
-        value={value || (opts[0] || '')}
+        value={current}
         onChange={(e) => onChange(e.target.value)}
         className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
       >
@@ -159,7 +191,7 @@ const NodeRenderer: React.FC<{
       </button>
       {open && (
         <div className="pl-3">
-          {entries.map(([key, child]) => (
+          {entries.map(([, child]) => (
             <NodeRenderer
               key={child.fullPath}
               node={child}
@@ -191,7 +223,7 @@ export const NestedBodyEditor: React.FC<NestedBodyEditorProps> = ({ fields, valu
         <div className="text-center py-4 text-gray-500 text-sm">No fields available for this message</div>
       ) : (
         <div className="space-y-2">
-          {rootChildren.map(([key, child]) => (
+          {rootChildren.map(([, child]) => (
             <NodeRenderer
               key={child.fullPath}
               node={child}

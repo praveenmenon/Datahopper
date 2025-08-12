@@ -12,6 +12,9 @@ import (
 
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/desc/protoparse"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 // VirtualFS implements fs.FS for in-memory proto files with smart import resolution
@@ -249,8 +252,28 @@ func (s *Service) storeProtoparseDescriptors(fileDescriptors []*desc.FileDescrip
 		return fmt.Errorf("no user proto files found (only Google well-known types)")
 	}
 	
-	// Store the descriptors directly
+	// Store the descriptors directly for desc-based lookups
 	s.descFiles = userFiles
+
+	// Additionally, convert to a FileDescriptorSet and merge into protoregistry so
+	// callers that rely on protoregistry (e.g., encoder) can find message descriptors
+	set := &descriptorpb.FileDescriptorSet{File: make([]*descriptorpb.FileDescriptorProto, 0, len(userFiles))}
+	for _, fd := range userFiles {
+		if proto := fd.AsFileDescriptorProto(); proto != nil {
+			set.File = append(set.File, proto)
+		}
+	}
+	// Add well-known types that user files commonly import so NewFiles can resolve
+	addWellKnown := func(path string) {
+		if gfd, err := protoregistry.GlobalFiles.FindFileByPath(path); err == nil {
+			set.File = append(set.File, protodesc.ToFileDescriptorProto(gfd))
+		}
+	}
+	addWellKnown("google/protobuf/descriptor.proto")
+	addWellKnown("google/protobuf/timestamp.proto")
+	if err := s.registerDescriptorSet(set); err != nil {
+		return fmt.Errorf("failed to register protoparse descriptors into registry: %w", err)
+	}
 	
 	s.logger.Info().Int("storedCount", len(userFiles)).Msg("Successfully stored proto file descriptors")
 	return nil
