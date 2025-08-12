@@ -1,0 +1,316 @@
+// Web Service.
+syntax = "proto3";
+
+package payment3_paymentmethodpb;
+
+option go_package="golang.frontdoorhome.com/software/protos/go/payment3_paymentmethodpb";
+option csharp_namespace = "FTDR.Protos.Payment3PaymentMethod";
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/timestamp.proto";
+import "common/common.proto";
+import "payment3_commonpb/payment3_common.proto";
+
+message CreateUpdatePaymentMethodRequest {
+  PaymentMethod paymentMethod = 1;
+}
+
+message CreatePaymentMethodResponse {
+  string paymentMethodID = 1;
+}
+
+message GetPaymentMethodResponse {
+  PaymentMethod paymentMethod = 1;
+}
+
+message UndeletePaymentMethodRequest {
+  repeated string paymentMethodID = 1;
+}
+
+message PaymentMethod {
+    string paymentMethodID = 10;
+    bool includedInWallet = 20;
+    payment3_commonpb.Brand brand = 30;         // Brand to associate with payment method Merchant
+
+    PaymentMethodDetails details = 100;
+    ProcessorPaymentMethod processor = 200 [(common.internal) = true];
+    Owner owner = 300;
+    DisbursementDetails disbursementDetails = 400;
+
+    common.ApplicationSource source = 800;     // Name of service creating the payment method
+    payment3_commonpb.DatabaseRecord db = 900; // database information
+}
+
+// DisbursementDetails owns the details of address and customer ID's which can be used to trace back address and customer information in mongo/star.
+message DisbursementDetails {
+    CustomerDetails customer  = 100;
+    AddressDetails address = 200;
+    string CustomerID  = 10 [deprecated=true]; // Deprecated - use CustomerDetails instead
+    string AddressID = 20 [deprecated=true]; // Deprecated - use AddressDetails instead
+}
+
+message CustomerDetails {
+    string customerID = 10; // Used to search for more information about customer
+    string fullName = 11;
+    string firstName = 12;
+    string middleName = 13;
+    string lastName = 14;
+    string customerType = 15;
+    string email = 16 [(common.do_not_log) = true];
+}
+
+message AddressDetails {
+    AddressType type = 21;
+    string country = 22;
+    string addressLine1 = 23;
+    string addressLine2 = 24;
+    string city = 25;
+    string state = 26;
+    string zip = 27;
+}
+enum AddressType {
+    Undefined_AddressType = 0;
+    BillingAddress = 1;
+    MailingAddress = 2;
+    PropertyAddress = 3;
+}
+
+// PaymentMethodDetails owns the details of a paymentMethod specific to a CreditCard or to an ACH account
+message PaymentMethodDetails {
+    PaymentMethodType type = 100;
+    oneof details {
+        CreditCardDetails cc = 101;  // ReadOnly
+        ACHDetails ach = 102;        // ReadOnly
+        PayPalDetails paypal = 103;  // ReadOnly
+        CheckDetails check = 104;    // ReadOnly
+    }
+    CashFlow cashFlow = 200;
+}
+
+enum PaymentMethodType {
+    Undefined_PaymentMethodType = 0;
+    CreditCard = 1;
+    ACH = 2;
+    PayPal = 3;
+    Check = 4;
+}
+
+enum CashFlow {
+    Undefined_CashFlow = 0;
+    Receivable = 1;
+    Payable = 2;
+//    Either? = 3;
+}
+
+message CreditCardDetails {
+    string last4 = 1;                // ReadOnly, will always be /\d{4}/
+    common.Date expirationDate = 2;  // ReadOnly, day will always be 0
+    CreditCardBrand brand = 3;       // ReadOnly, can be Visa, MasterCard, etc.
+    CreditCardBillingDetails billingDetails = 4;
+}
+
+message CreditCardBillingDetails {
+    string country = 1;              // ReadOnly, two-letter ISO code representing the country of the card
+    string name = 2;                 // ReadOnly, will have first name and last name
+    reserved 3;                      // ReadOnly, will have street address
+    string city = 4;                 // ReadOnly, will have City, district, suburb, town, or village.
+    string state = 5;                // ReadOnly, will have State, county, province, or region.
+    string zip = 6;                  // ReadOnly, ZIP or postal code.
+    string phone = 7 [(common.do_not_log) = true];                // Readonly, Billing phone number (including extension).
+    string email = 8 [(common.do_not_log) = true];                // Readonly, email
+    string addressLine1 = 9;         // ReadOnly, will have (Street address/PO Box/Company name).
+    string addressLine2 = 10;        // ReadOnly, will have (Apartment/Suite/Unit/Building).
+}
+
+enum CreditCardBrand {               // Original list from Stripe supported values
+    Undefined_Brand = 0;
+    AmericanExpress = 10;
+    DinersClub = 20;
+    Discover = 30;
+    JCB = 40;                        // Japanese Credit Bureau
+    MasterCard = 50;
+    UnionPay = 60;
+    Visa = 70;
+    BrandUnknown = 200;              // Brand of card is unknown
+}
+
+message ACHDetails {
+    string routingNumber = 1;
+    string last4 = 2;
+    string encryptedAccountNumber = 3 [(common.do_not_log) = true];
+}
+
+message PayPalDetails {
+    string email = 1 [(common.do_not_log) = true];
+    string firstName = 2 [(common.do_not_log) = true];
+    string lastName = 3 [(common.do_not_log) = true];
+}
+
+message CheckDetails {
+    string name = 1;
+    string street1 = 2;
+    string street2 = 3;
+    string city = 4;
+    string state = 5;
+    string zip = 6;
+    string email = 7 [(common.do_not_log) = true];
+}
+
+
+// ProcessorPaymentMethod owns the details of a paymentMethod specific to the payment processor
+message ProcessorPaymentMethod {
+    payment3_commonpb.PaymentProcessor processor = 100;
+    oneof processorPaymentMethod {
+    	StripePaymentMethod stripe = 101;
+    	PaymentusPaymentMethod paymentus = 102;
+    	BraintreePaymentMethod braintree = 103;
+      JDEACHPaymentMethod    jdeACH    = 104;
+      JDECheckPaymentMethod  jdeCheck  = 105;
+    }
+}
+
+message StripePaymentMethod {
+    string paymentMethodID = 1;     // Payment Method ID
+    string setupIntentID = 2;       // Setup Intent ID
+    string cardID = 3;              // Stripe Card ID
+    string cardFingerprint = 4;     // Stripe Card Fingerprint
+    google.protobuf.Timestamp cauDate = 5; // Stripe Card CAU Date
+}
+
+message PaymentusPaymentMethod {
+    string email = 1 [(common.do_not_log) = true];
+    string paymentusAccountToken = 2 [(common.do_not_log) = true];
+    
+    string securePayload = 5 [(common.do_not_log) = true];       // Used to pass response from paymentus-secure to paymentus-gateway. Do not persist to mongo.
+}
+
+message BraintreePaymentMethod {
+    string braintreeCustomerID = 20;
+    string payPalPayerID = 30;
+    string paymentMethodToken = 40;
+    string paymentMethodID = 50;
+
+    string nonce = 900;       // Used to pass nonce from front end to braintree-gateway.  Do not persist to mongo.
+}
+
+message JDECheckPaymentMethod {
+    // Empty, we can add to it later.
+}
+
+message JDEACHPaymentMethod {
+    // Empty, we can add to it later.
+}
+
+
+// Owner identifies whom owns the CC/ACH/PayPal payment method
+message Owner {
+    // Deprecated: never used
+    string name = 100;
+    OwnerIdentity ownerIdentity = 200;
+}
+
+message OwnerIdentity {
+    OwnerIdentityType type = 100;
+    oneof identity {
+        ContractIdentity contractIdentity = 101;
+        CustomerIdentity customerIdentity = 103;
+        ApplianceReplacementIdentity replacementIdentity = 110;
+        DispatchIdentity dispatchIdentity = 120;
+        OrderIdentity orderIdentity = 130;
+        QuoteIdentity quoteIdentity = 140;
+    }
+}
+
+enum OwnerIdentityType {
+    Undefined_IdentityType = 0;
+    ContractIdentityType = 1;
+    ReplacementIdentityType = 2;
+    CustomerIdentityType = 3;
+    DispatchIdentityType = 4;
+    OrderIdentityType = 5;
+    QuoteIdentityType = 6;
+}
+
+message ContractIdentity {
+    string contractID = 1;
+    string contractPaymentID = 2 [deprecated=true]; // Do not use, will be removed soon. Use contractID only for contractIdentity.
+}
+
+message CustomerIdentity {
+    string customerID = 1;
+}
+
+message ApplianceReplacementIdentity {
+    string replacementID = 1;
+}
+
+message DispatchIdentity {
+    string dispatchID = 1;
+}
+
+message OrderIdentity {
+    string orderID = 1;
+}
+
+message QuoteIdentity {
+    string quoteID = 1;
+}
+
+message QueryPaymentMethodsRequest {
+    QueryPaymentMethodsCriteria criteria = 10;
+}
+
+message QueryPaymentMethodsCriteria {
+    // Return non deleted PM matching the specified criteria
+    QueryPaymentMethodsOwner owner = 10;
+    QueryProcessorPaymentMethod processorPaymentMethod = 20;
+    QueryPaymentMethodID queryPaymentMethod = 30;
+}
+
+message QueryPaymentMethodsOwner {
+    repeated string contractID = 10;
+    repeated string customerID = 20;
+    repeated string applianceReplacementID = 30;
+    repeated string dispatchID = 40;
+}
+
+message QueryProcessorPaymentMethod {
+    // Returns deleted and non deleted PM matching the specified criteria
+    payment3_commonpb.PaymentProcessor processor = 100;
+    oneof processorPaymentMethod {
+        QueryStripePaymentMethod Stripe = 200;
+        QueryPaymentusPaymentMethod Paymentus = 300;
+        // QueryBraintreePaymentMethod Braintree = // Possible future
+    }
+}
+
+message QueryPaymentMethodID {
+    repeated string paymentMethodID = 10;
+    bool isDeleted = 100;       // includes deleted PM records if true
+}
+
+message QueryStripePaymentMethod {
+    repeated string paymentMethodId = 100;
+    repeated string cardFingerprint = 200;
+}
+
+message QueryPaymentusPaymentMethod {
+    repeated string paymentusAccountToken = 100 [(common.do_not_log) = true];
+}
+
+message QueryPaymentMethodsResponse {
+    repeated PaymentMethod paymentMethod = 10;
+}
+
+// Snowflake Only
+
+message SnowflakePaymentMethod {
+    PaymentMethod paymentMethod = 1;
+    EventType eventType = 2; // type of event
+}
+
+enum EventType {
+    Unknown_EventType = 0; // unknown event
+    CAU = 1; // Stripe CAU event
+    PaymentMethodPayableCreated = 2; // Payable Payment Method event
+}

@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package common;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package="golang.frontdoorhome.com/software/protos/go/common";
+
+/*
+     **********Custom file level tags**********
+     Custom Protocol Buffers option to specify calls allowed for all the RPC's defined. This will serve as the common calls allowed.
+     The file level serviceCalls will be used when method level methodCalls are not specified. If none is specified HTTP will be considered.
+     Allowed values - GRPC, HTTP_JSON, HTTP_PROTO
+     Example - 
+        option (common.serviceCalls) = "HTTP_JSON,GRPC";
+*/
+extend google.protobuf.FileOptions {
+    string serviceCalls = 50004;
+  }
+
+/*
+    **********Custom method level tags**********
+    Custom Protocol Buffers option to enable JSON middleware support,set Method type/URI for api and indicate allowed calls(GRPC/HTTP/HTTP_JSON) while generating microservice using go-microservice-generator.
+    
+    If allowJson value is set to true of rpc service declaration in proto file then JSON support will get enabled along with protobuf content-type
+    allowJson field is optional and by default it's value is false. It will be deprecated and json content type will be allowed based on HTTP_JSON allowed call
+
+    methodCalls will be a string indicating the type of calls allowed for the api separated by comma.
+    if methodCalls field is not specified then the allowed calls defined at the file level will be considered. If even that is not specified 
+    then HTTP over proto will be considered by default.
+    Allowed values - GRPC, HTTP_JSON, HTTP_PROTO
+
+    httpMethod field indicates the method type (GET/PUT/POST/DELETE/PATCH) for the api
+    httpMethod will be a mandatory field if HTTP calls are allowed for the api
+
+    methodURI specifies the endpoint url for the api
+
+    For more details, please refer- https://developers.google.com/protocol-buffers/docs/proto#customoptions
+    Example-
+    service EstimateCostCaps {
+            rpc Get (ReviewCostsRequest) returns (ReviewCostsResponse) {
+                option (common.allowJson) = true; // to be deprecated
+                option (common.methodCalls) = "HTTP_JSON,GRPC;
+                option (common.httpMethod) = "GET";
+                option (common.methodURI) = "/estimate/v1/estimates";
+            };
+        }
+*/
+
+extend google.protobuf.MethodOptions {
+    bool allowJson = 50000;
+    string methodCalls = 50002;
+    string httpMethod = 50003;
+    string methodURI = 50005;
+  }
+
+//Custom tag for URI at service level- will be deprecated and URI specified at method level will be considered
+//Custom tag for defining the endpoint URI . This is used by the Go-microservice-generator and API-client-generator.
+//The old mechanism of defining @URI will be deprecated and phased out eventually.
+//For more details, please refer- https://developers.google.com/protocol-buffers/docs/proto#customoptions
+//Example-
+//  service GetEstimates {
+//      option (common.URI) = "/estimate/v1/estimates";
+//	    rpc Get (GetEstimateRequest) returns (GetEstimateResponse);
+//  }
+extend google.protobuf.ServiceOptions {
+    string URI = 50001;
+  }

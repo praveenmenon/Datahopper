@@ -1,13 +1,22 @@
 import React from 'react';
-import { Plus, Trash2, Info } from 'lucide-react';
-import { BodyField } from '../lib/types';
+import { Plus, Trash2, Info, Zap } from 'lucide-react';
+import { BodyField, MessageField } from '../lib/types';
 
 interface BodyEditorProps {
   body: BodyField[];
   onChange: (body: BodyField[]) => void;
+  protoMessage?: string;
+  messageFields?: MessageField[];
+  onGenerateFromProto?: (fields: MessageField[]) => void;
 }
 
-export const BodyEditor: React.FC<BodyEditorProps> = ({ body, onChange }) => {
+export const BodyEditor: React.FC<BodyEditorProps> = ({ 
+  body, 
+  onChange, 
+  protoMessage, 
+  messageFields, 
+  onGenerateFromProto 
+}) => {
   const addField = () => {
     onChange([...body, { path: '', value: '' }]);
   };
@@ -42,6 +51,16 @@ export const BodyEditor: React.FC<BodyEditorProps> = ({ body, onChange }) => {
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-gray-900">Request Body</h3>
         <div className="flex space-x-2">
+          {protoMessage && onGenerateFromProto && messageFields && messageFields.length > 0 && (
+            <button
+              onClick={() => onGenerateFromProto(messageFields)}
+              className="inline-flex items-center text-xs text-blue-600 hover:text-blue-700 transition-colors"
+              title="Generate fields from protobuf message"
+            >
+              <Zap className="h-3 w-3 mr-1" />
+              Generate from Proto
+            </button>
+          )}
           <button
             onClick={removeEmptyFields}
             className="text-xs text-gray-500 hover:text-gray-700 transition-colors"

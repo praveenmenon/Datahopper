@@ -116,7 +116,9 @@ export const RegisterProtoModal: React.FC<RegisterProtoModalProps> = ({
         // Debug what we're sending
         console.log('Submitting files:', selectedFiles.map(f => ({ 
           name: f.name, 
-          relativePath: (f as any).webkitRelativePath || (f as any)._relativePath,
+          webkitRelativePath: (f as any).webkitRelativePath,
+          _relativePath: (f as any)._relativePath,
+          relativePath: (f as any).webkitRelativePath || (f as any)._relativePath || f.name,
           type: f.type, 
           size: f.size 
         })));
@@ -200,25 +202,33 @@ export const RegisterProtoModal: React.FC<RegisterProtoModalProps> = ({
   };
 
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newFiles = Array.from(e.target.files || []);
-    console.log('Files selected:', newFiles);
-    console.log('Traditional file details:', newFiles.map(f => ({ name: f.name, type: f.type, size: f.size })));
-    addFiles(newFiles);
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('handleFileSelect called - using traditional input');
+    const rawFiles = Array.from(e.target.files || []).filter(f => f.name.endsWith('.proto'));
+    console.log('Proto files selected:', rawFiles.map(f => f.name));
+    
+    // Just add files directly - backend will handle import resolution
+    addFiles(rawFiles);
   };
 
-  const handleDirectorySelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newFiles = Array.from(e.target.files || []);
-    console.log('Directory selected, files:', newFiles);
-    console.log('Traditional directory file details:', newFiles.map(f => ({ name: f.name, type: f.type, size: f.size })));
-    addFiles(newFiles);
+  const handleDirectorySelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawFiles = Array.from(e.target.files || []).filter(f => f.name.endsWith('.proto'));
+    console.log('Directory selected, proto files:', rawFiles.map(f => f.name));
+    
+    // Just add files directly - backend will handle import resolution
+    addFiles(rawFiles);
     setIsDirectory(true);
   };
 
-  // Add files to the existing collection (avoiding duplicates)
+  // Add files to the existing collection (avoiding duplicates by relative path)
   const addFiles = (newFiles: File[]) => {
-    const existingFileNames = new Set(selectedFiles.map(f => f.name));
-    const uniqueFiles = newFiles.filter(f => !existingFileNames.has(f.name));
+    const existingRelativePaths = new Set(selectedFiles.map(f => 
+      (f as any)._relativePath || (f as any).webkitRelativePath || f.name
+    ));
+    const uniqueFiles = newFiles.filter(f => {
+      const relativePath = (f as any)._relativePath || (f as any).webkitRelativePath || f.name;
+      return !existingRelativePaths.has(relativePath);
+    });
     
     if (uniqueFiles.length > 0) {
       setSelectedFiles(prev => [...prev, ...uniqueFiles]);
@@ -240,10 +250,14 @@ export const RegisterProtoModal: React.FC<RegisterProtoModalProps> = ({
     setProtocError(null);
   };
 
+
+
   // Modern file picker (Chrome) with fallback
   const openFilePicker = async () => {
+    console.log('openFilePicker called');
     // Try modern File System Access API first (Chrome)
     if ('showOpenFilePicker' in window) {
+      console.log('Using modern File System Access API');
       try {
         const fileHandles = await (window as any).showOpenFilePicker({
           multiple: true,
@@ -257,6 +271,7 @@ export const RegisterProtoModal: React.FC<RegisterProtoModalProps> = ({
         for (const handle of fileHandles) {
           const file = await handle.getFile();
           files.push(file);
+          console.log(`Selected file: ${file.name}`);
         }
         
         console.log('Modern file picker selected:', files);
@@ -267,10 +282,13 @@ export const RegisterProtoModal: React.FC<RegisterProtoModalProps> = ({
         console.log('Modern file picker cancelled or failed:', error);
         return;
       }
+    } else {
+      console.log('showOpenFilePicker not available, using traditional file input');
     }
     
     // Fallback to traditional input (Safari)
     if (fileInputRef.current) {
+      console.log('Clicking traditional file input');
       fileInputRef.current.click();
     }
   };
@@ -283,23 +301,24 @@ export const RegisterProtoModal: React.FC<RegisterProtoModalProps> = ({
         const dirHandle = await (window as any).showDirectoryPicker();
         const files: File[] = [];
         
-        // Recursively collect .proto files with relative paths
+        // Recursively collect .proto files
         async function collectFiles(dirHandle: any, relativePath = '') {
           for await (const [name, handle] of dirHandle.entries()) {
             const currentPath = relativePath ? `${relativePath}/${name}` : name;
             
             if (handle.kind === 'file' && name.endsWith('.proto')) {
               const file = await handle.getFile();
-              // Attach relative path for proper directory structure
-              (file as any)._relativePath = currentPath;
               files.push(file);
+              console.log(`Collected file: ${file.name}`);
             } else if (handle.kind === 'directory') {
+              console.log(`Entering directory: ${name}`);
               await collectFiles(handle, currentPath);
             }
           }
         }
         
         await collectFiles(dirHandle);
+        console.log(`📁 Collected ${files.length} proto files`);
         
         console.log('Modern directory picker selected:', files);
         console.log('Directory file details:', files.map(f => ({ 
@@ -420,8 +439,17 @@ export const RegisterProtoModal: React.FC<RegisterProtoModalProps> = ({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Select .proto Files
                   </label>
+                  <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                    <div className="text-sm text-green-800">
+                      <strong>🎯 Smart Import Resolution</strong>
+                      <p className="mt-1 text-xs text-green-700">
+                        Select individual files or directories - the system will automatically resolve import paths 
+                        like <code>common/common.proto</code> by matching filenames.
+                      </p>
+                    </div>
+                  </div>
                   <div className="flex gap-2 flex-wrap">
-                    {/* Files - Modern API + fallback overlay */}
+                    {/* Files - Now enabled with smart resolution */}
                     <div className="relative inline-flex">
                       <button
                         type="button"
@@ -578,8 +606,8 @@ export const RegisterProtoModal: React.FC<RegisterProtoModalProps> = ({
                         <div key={index} className="flex items-center justify-between p-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0">
                           <div className="flex items-center space-x-2 flex-1 min-w-0">
                             <FileText className="h-3 w-3 text-gray-500 flex-shrink-0" />
-                            <span className="text-xs text-gray-700 font-mono truncate" title={(file as any).webkitRelativePath || (file as any)._relativePath || file.name}>
-                              {(file as any).webkitRelativePath || (file as any)._relativePath || file.name}
+                            <span className="text-xs text-gray-700 font-mono truncate" title={(file as any)._relativePath || (file as any).webkitRelativePath || file.name}>
+                              {(file as any)._relativePath || (file as any).webkitRelativePath || file.name}
                             </span>
                             <span className="text-xs text-gray-400 flex-shrink-0">
                               ({(file.size / 1024).toFixed(1)} KB)

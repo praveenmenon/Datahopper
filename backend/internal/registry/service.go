@@ -8,11 +8,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jhump/protoreflect/desc"
 	"github.com/rs/zerolog"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
-	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -20,6 +21,7 @@ import (
 type Service struct {
 	mu           sync.RWMutex
 	files        *protoregistry.Files
+	descFiles    []*desc.FileDescriptor // Store protoparse results directly
 	logger       zerolog.Logger
 	protoRoots   []string
 	includePaths []string
@@ -48,45 +50,26 @@ func (s *Service) RegisterRoot(path string, include []string) error {
 
 	// Check if path is a file or directory
 	if strings.HasSuffix(path, ".proto") {
-		return s.registerSingleFile(path)
+		return s.RegisterSingleFile(path)
 	}
 
 	return s.registerDirectory(path)
 }
 
 // registerSingleFile registers a single .proto file
-func (s *Service) registerSingleFile(filePath string) error {
-	// Get directory for include path
-	dir := filepath.Dir(filePath)
-	
-	// Build protoc command
-	cmd := exec.Command("protoc",
-		"--descriptor_set_out=/dev/stdout",
-		"--include_imports",
-		"-I", dir,
-		filePath,
-	)
-
-	// Add additional include paths
-	for _, includePath := range s.includePaths {
-		cmd.Args = append(cmd.Args, "-I", includePath)
-	}
-
-	// Execute protoc
-	output, err := cmd.CombinedOutput()
+func (s *Service) RegisterSingleFile(filePath string) error {
+	// Read the file content
+	content, err := os.ReadFile(filePath)
 	if err != nil {
-		s.logger.Error().Err(err).Str("command", cmd.String()).Str("output", string(output)).Msg("protoc command failed")
-		return fmt.Errorf("protoc failed: %w, output: %s", err, string(output))
+		return fmt.Errorf("failed to read file %s: %w", filePath, err)
 	}
 
-	// Parse descriptor set
-	var descriptorSet descriptorpb.FileDescriptorSet
-	if err := proto.Unmarshal(output, &descriptorSet); err != nil {
-		return fmt.Errorf("failed to unmarshal descriptor set: %w", err)
+	// Use virtual filesystem approach for single files
+	fileContents := map[string][]byte{
+		filepath.Base(filePath): content,
 	}
 
-	// Register files
-	return s.registerDescriptorSet(&descriptorSet)
+	return s.RegisterFromVirtualFS(fileContents)
 }
 
 // registerDirectory registers all .proto files in a directory recursively
@@ -95,7 +78,7 @@ func (s *Service) registerDirectory(dirPath string) error {
 	if _, err := exec.LookPath("protoc"); err != nil {
 		return fmt.Errorf("protoc not found in PATH: %w", err)
 	}
-	
+
 	// Find all .proto files recursively
 	protoFiles, err := s.findProtoFilesRecursive(dirPath)
 	if err != nil {
@@ -146,19 +129,19 @@ func (s *Service) registerDirectory(dirPath string) error {
 // findProtoFilesRecursive finds all .proto files in a directory recursively
 func (s *Service) findProtoFilesRecursive(dirPath string) ([]string, error) {
 	var protoFiles []string
-	
+
 	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		
+
 		if !info.IsDir() && strings.HasSuffix(path, ".proto") {
 			protoFiles = append(protoFiles, path)
 		}
-		
+
 		return nil
 	})
-	
+
 	return protoFiles, err
 }
 
@@ -194,29 +177,51 @@ func (s *Service) ListMessageTypes() ([]string, error) {
 
 	var messageTypes []string
 
-	// Iterate through all registered files
-	s.files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		// Get all message types in this file
-		filePath := fd.Path()
-		s.logger.Debug().Str("file", filePath).Msg("Scanning file for message types")
+	// First check if we have protoparse descriptors (from virtual filesystem)
+	if len(s.descFiles) > 0 {
+		for _, fd := range s.descFiles {
+			filePath := fd.GetName()
+			s.logger.Debug().Str("file", filePath).Msg("Scanning desc file for message types")
 
-		// Get package name
-		packageName := string(fd.Package())
-		if packageName == "" {
-			packageName = "default"
+			// Get package name
+			packageName := fd.GetPackage()
+			if packageName == "" {
+				packageName = "default"
+			}
+
+			// Get all message types
+			messages := fd.GetMessageTypes()
+			for _, msg := range messages {
+				fqn := fmt.Sprintf("%s.%s", packageName, msg.GetName())
+				messageTypes = append(messageTypes, fqn)
+				s.logger.Debug().Str("message", fqn).Msg("Found message type from desc")
+			}
 		}
+	} else {
+		// Fallback to original protobuf registry approach
+		s.files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+			// Get all message types in this file
+			filePath := fd.Path()
+			s.logger.Debug().Str("file", filePath).Msg("Scanning file for message types")
 
-		// Get all message types
-		messages := fd.Messages()
-		for i := 0; i < messages.Len(); i++ {
-			msg := messages.Get(i)
-			fqn := fmt.Sprintf("%s.%s", packageName, msg.Name())
-			messageTypes = append(messageTypes, fqn)
-			s.logger.Debug().Str("message", fqn).Msg("Found message type")
-		}
+			// Get package name
+			packageName := string(fd.Package())
+			if packageName == "" {
+				packageName = "default"
+			}
 
-		return true
-	})
+			// Get all message types
+			messages := fd.Messages()
+			for i := 0; i < messages.Len(); i++ {
+				msg := messages.Get(i)
+				fqn := fmt.Sprintf("%s.%s", packageName, msg.Name())
+				messageTypes = append(messageTypes, fqn)
+				s.logger.Debug().Str("message", fqn).Msg("Found message type")
+			}
+
+			return true
+		})
+	}
 
 	return messageTypes, nil
 }
@@ -247,6 +252,196 @@ func (s *Service) GetMessageDescriptor(fqn string) (protoreflect.MessageDescript
 	}
 
 	return foundMsg, nil
+}
+
+// GetMessageFields returns field information for a message by FQN
+func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// First, search through descFiles (protoparse descriptors from virtual filesystem)
+	if len(s.descFiles) > 0 {
+		for _, fd := range s.descFiles {
+			// Get package name
+			packageName := fd.GetPackage()
+			if packageName == "" {
+				packageName = "default"
+			}
+
+			// Get all message types
+			messages := fd.GetMessageTypes()
+			for _, msg := range messages {
+				msgFqn := fmt.Sprintf("%s.%s", packageName, msg.GetName())
+				if msgFqn == fqn {
+					// Extract comprehensive field information including nested fields
+					return s.extractComprehensiveFields(msg, "", make(map[string]bool))
+				}
+			}
+		}
+	}
+
+	// Fallback to protoregistry approach
+	var foundMsg protoreflect.MessageDescriptor
+	s.files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		messages := fd.Messages()
+		for i := 0; i < messages.Len(); i++ {
+			msg := messages.Get(i)
+			fullName := string(fd.Package()) + "." + string(msg.Name())
+			if fullName == fqn {
+				foundMsg = msg
+				return false // stop iteration
+			}
+		}
+		return true
+	})
+
+	if foundMsg != nil {
+		// Extract comprehensive field information including nested fields
+		return s.extractComprehensiveFieldsFromProtoreflect(foundMsg, "", make(map[string]bool))
+	}
+
+	return nil, fmt.Errorf("message not found: %s", fqn)
+}
+
+// GetComprehensiveMessageFields returns all fields including nested fields with dot notation paths
+func (s *Service) GetComprehensiveMessageFields(fqn string) ([]map[string]interface{}, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// First, search through descFiles (protoparse descriptors)
+	if len(s.descFiles) > 0 {
+		for _, fd := range s.descFiles {
+			// Get package name
+			packageName := fd.GetPackage()
+			if packageName == "" {
+				packageName = "default"
+			}
+
+			// Get all message types
+			messages := fd.GetMessageTypes()
+			for _, msg := range messages {
+				msgFqn := fmt.Sprintf("%s.%s", packageName, msg.GetName())
+				if msgFqn == fqn {
+					return s.extractComprehensiveFields(msg, "", make(map[string]bool))
+				}
+			}
+		}
+	}
+
+	// Fallback to protoregistry approach
+	var foundMsg protoreflect.MessageDescriptor
+	s.files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		messages := fd.Messages()
+		for i := 0; i < messages.Len(); i++ {
+			msg := messages.Get(i)
+			fullName := string(fd.Package()) + "." + string(msg.Name())
+			if fullName == fqn {
+				foundMsg = msg
+				return false // stop iteration
+			}
+		}
+		return true
+	})
+
+	if foundMsg != nil {
+		return s.extractComprehensiveFieldsFromProtoreflect(foundMsg, "", make(map[string]bool))
+	}
+
+	return nil, fmt.Errorf("message not found: %s", fqn)
+}
+
+// extractComprehensiveFields recursively extracts all fields including nested ones
+func (s *Service) extractComprehensiveFields(msg *desc.MessageDescriptor, prefix string, visited map[string]bool) ([]map[string]interface{}, error) {
+	fields := make([]map[string]interface{}, 0)
+	
+	// Prevent infinite recursion
+	msgFqn := msg.GetFullyQualifiedName()
+	if visited[msgFqn] {
+		return fields, nil
+	}
+	visited[msgFqn] = true
+	
+	for _, field := range msg.GetFields() {
+		fieldPath := field.GetName()
+		if prefix != "" {
+			fieldPath = prefix + "." + field.GetName()
+		}
+		
+		fieldInfo := map[string]interface{}{
+			"path":     fieldPath,
+			"name":     field.GetName(),
+			"number":   field.GetNumber(),
+			"type":     field.GetType().String(),
+			"repeated": field.IsRepeated(),
+			"optional": field.IsRepeated() || field.GetType().String() == "message",
+			"message":  field.GetMessageType() != nil,
+		}
+		
+		// Add message type if it's a message field
+		if field.GetMessageType() != nil {
+			fieldInfo["messageType"] = field.GetMessageType().GetFullyQualifiedName()
+			
+			// Recursively get nested fields
+			if nestedFields, err := s.extractComprehensiveFields(field.GetMessageType(), fieldPath, visited); err == nil {
+				fields = append(fields, fieldInfo)
+				fields = append(fields, nestedFields...)
+			} else {
+				fields = append(fields, fieldInfo)
+			}
+		} else {
+			fields = append(fields, fieldInfo)
+		}
+	}
+	
+	return fields, nil
+}
+
+// extractComprehensiveFieldsFromProtoreflect recursively extracts all fields including nested ones from protoreflect
+func (s *Service) extractComprehensiveFieldsFromProtoreflect(msg protoreflect.MessageDescriptor, prefix string, visited map[string]bool) ([]map[string]interface{}, error) {
+	fields := make([]map[string]interface{}, 0)
+	
+	// Prevent infinite recursion
+	msgFqn := string(msg.FullName())
+	if visited[msgFqn] {
+		return fields, nil
+	}
+	visited[msgFqn] = true
+	
+	msgFields := msg.Fields()
+	for i := 0; i < msgFields.Len(); i++ {
+		fd := msgFields.Get(i)
+		fieldPath := string(fd.Name())
+		if prefix != "" {
+			fieldPath = prefix + "." + string(fd.Name())
+		}
+		
+		fieldInfo := map[string]interface{}{
+			"path":     fieldPath,
+			"name":     string(fd.Name()),
+			"number":   int32(fd.Number()),
+			"type":     string(fd.Kind()),
+			"repeated": fd.IsList(),
+			"optional": fd.HasPresence(),
+			"message":  fd.Message() != nil,
+		}
+		
+		// Add message type if it's a message field
+		if fd.Message() != nil {
+			fieldInfo["messageType"] = string(fd.Message().FullName())
+			
+			// Recursively get nested fields
+			if nestedFields, err := s.extractComprehensiveFieldsFromProtoreflect(fd.Message(), fieldPath, visited); err == nil {
+				fields = append(fields, fieldInfo)
+				fields = append(fields, nestedFields...)
+			} else {
+				fields = append(fields, fieldInfo)
+			}
+		} else {
+			fields = append(fields, fieldInfo)
+		}
+	}
+	
+	return fields, nil
 }
 
 // GetFileDescriptor returns a file descriptor by path

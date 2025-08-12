@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package comprehensive.v1;
+
+option go_package = "github.com/example/comprehensive/v1;comprehensivev1";
+
+message Address {
+  string street = 1;
+  string city = 2;
+  string state = 3;
+  string zipCode = 4;
+}
+
+message ContactInfo {
+  string email = 1;
+  string phone = 2;
+  Address address = 3;
+}
+
+message UserProfile {
+  string firstName = 1;
+  string lastName = 2;
+  int32 age = 3;
+  repeated string tags = 4;
+  ContactInfo contact = 5;
+}
+
+message CreateUserRequest {
+  UserProfile user = 1;
+  bool sendWelcomeEmail = 2;
+  repeated string roles = 3;
+}
+
+message CreateUserResponse {
+  string userId = 1;
+  string status = 2;
+  UserProfile createdUser = 3;
+}

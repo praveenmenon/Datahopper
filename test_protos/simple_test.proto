@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package simple.v1;
+
+option go_package = "github.com/example/simple/v1;simplev1";
+
+message SimpleAddress {
+  string street = 1;
+  string city = 2;
+  string state = 3;
+  string zipCode = 4;
+}
+
+message SimpleContact {
+  string email = 1;
+  string phone = 2;
+  SimpleAddress address = 3;
+}
+
+message SimpleUser {
+  string id = 1;
+  string firstName = 2;
+  string lastName = 3;
+  int32 age = 4;
+  repeated string tags = 5;
+  SimpleContact contact = 6;
+}
+
+message SimpleRequest {
+  SimpleUser user = 1;
+  bool active = 2;
+  repeated string permissions = 3;
+}

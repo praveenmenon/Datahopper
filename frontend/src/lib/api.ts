@@ -8,7 +8,8 @@ import {
   UpdateRequestRequest, 
   RunRequest, 
   RunResponse,
-  ProtoRegisterRequest 
+  ProtoRegisterRequest,
+  MessageFieldsResponse 
 } from './types';
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8088';
@@ -56,10 +57,13 @@ export const protoApi = {
   registerFromFiles: (files: File[]): Promise<void> => {
     const formData = new FormData();
     
-    // Add files with relative paths preserved
+    // Add files with just their filenames - backend will handle import resolution
     files.forEach(file => {
-      const relativePath = (file as any).webkitRelativePath || (file as any)._relativePath || file.name;
-      formData.append('files', file, relativePath);
+      console.log('Adding to FormData:', { 
+        fileName: file.name, 
+        size: file.size
+      });
+      formData.append('files', file);
     });
     
     return apiRequest('/api/protos/register/upload', {
@@ -72,6 +76,9 @@ export const protoApi = {
 
   listMessages: (): Promise<MessageType[]> =>
     apiRequest('/api/registry/messages'),
+    
+  getMessageFields: (fqn: string): Promise<MessageFieldsResponse> =>
+    apiRequest(`/api/registry/messages/${encodeURIComponent(fqn)}/fields`),
 };
 
 // Collections API

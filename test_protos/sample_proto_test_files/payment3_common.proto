@@ -1,0 +1,36 @@
+// Web Service.
+syntax = "proto3";
+
+package payment3_commonpb;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package="golang.frontdoorhome.com/software/protos/go/payment3_commonpb";
+option csharp_namespace = "FTDR.Protos.Payment3Common";
+
+enum PaymentProcessor {
+    Undefined_PaymentProcessor = 0;
+    Stripe = 1;
+    Paymentus = 2;
+    Braintree = 3;
+    JDECheck = 4;
+    JDEACH = 5;
+    PayPal = 6;
+    JPMC = 7;
+}
+
+enum Brand {
+    Undefined_Brand = 0;
+    HSA = 1;
+    AHS = 2;
+    ProConnect = 3;
+    HomeServicePlan = 4 [deprecated=true];
+    FTDR = 5;
+    HBW210 = 6;
+}
+
+message DatabaseRecord {
+    google.protobuf.Timestamp deletedAt = 1; // doubles as a soft delete flag
+    google.protobuf.Timestamp createdAt = 2;
+    google.protobuf.Timestamp updatedAt = 3; // Last update, including deletes
+}

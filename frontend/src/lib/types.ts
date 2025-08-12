@@ -100,6 +100,25 @@ export interface ProtoRegisterRequest {
 
 export interface MessageType {
   fqName: string;
+  package?: string;
+  name?: string;
+  description?: string;
+}
+
+export interface MessageField {
+  path?: string;  // Dot notation path for nested fields
+  name: string;
+  number: number;
+  type: string;
+  repeated: boolean;
+  optional: boolean;
+  message: boolean;
+  messageType?: string;
+}
+
+export interface MessageFieldsResponse {
+  fqn: string;
+  fields: MessageField[];
 }
 
 // UI state types

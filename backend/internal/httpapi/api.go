@@ -3,7 +3,6 @@ package httpapi
 import (
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -44,10 +43,10 @@ func NewAPI(registry *registry.Service, workspace *workspace.Service, runner *ru
 func (api *API) SetupRoutes(router *gin.Engine) {
 	// Add CORS middleware
 	router.Use(api.corsMiddleware())
-	
+
 	// Add logging middleware
 	router.Use(api.loggingMiddleware())
-	
+
 	// Add error handler
 	router.Use(api.errorHandler())
 
@@ -61,26 +60,27 @@ func (api *API) SetupRoutes(router *gin.Engine) {
 		apiGroup.POST("/protos/register", api.registerProtos)
 		apiGroup.POST("/protos/register/upload", api.registerProtosFromUpload)
 		apiGroup.GET("/registry/messages", api.listMessages)
-		
+		apiGroup.GET("/registry/messages/:fqn/fields", api.getMessageFields)
+
 		// Collections
 		apiGroup.GET("/collections", api.listCollections)
 		apiGroup.POST("/collections", api.createCollection)
 		apiGroup.GET("/collections/:id", api.getCollection)
 		apiGroup.PUT("/collections/:id", api.updateCollection)
 		apiGroup.DELETE("/collections/:id", api.deleteCollection)
-		
+
 		// Requests
 		apiGroup.POST("/collections/:id/requests", api.createRequest)
 		apiGroup.GET("/collections/:id/requests/:requestId", api.getRequest)
 		apiGroup.PUT("/collections/:id/requests/:requestId", api.updateRequest)
 		apiGroup.DELETE("/collections/:id/requests/:requestId", api.deleteRequest)
-		
+
 		// Environments
 		apiGroup.GET("/environments", api.listEnvironments)
 		apiGroup.POST("/environments", api.createEnvironment)
 		apiGroup.PUT("/environments/:id", api.updateEnvironment)
 		apiGroup.DELETE("/environments/:id", api.deleteEnvironment)
-		
+
 		// Request execution
 		apiGroup.POST("/run", api.runRequest)
 	}
@@ -120,7 +120,7 @@ func (api *API) loggingMiddleware() gin.HandlerFunc {
 		// Log request details
 		duration := time.Since(start)
 		status := c.Writer.Status()
-		
+
 		api.logger.Info().
 			Str("method", method).
 			Str("path", path).
@@ -139,7 +139,7 @@ func (api *API) errorHandler() gin.HandlerFunc {
 		if len(c.Errors) > 0 {
 			err := c.Errors.Last()
 			api.logger.Error().Err(err.Err).Msg("Request error")
-			
+
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Internal server error",
 			})
@@ -155,14 +155,14 @@ func (api *API) testMultipart(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Multipart form error: " + err.Error()})
 		return
 	}
-	
+
 	// Log what we received
 	api.logger.Info().Interface("form", form).Msg("Received multipart form")
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Multipart form received successfully",
-		"files": len(form.File),
-		"values": len(form.Value),
+		"files":   len(form.File),
+		"values":  len(form.Value),
 	})
 }
 
@@ -170,7 +170,7 @@ func (api *API) testMultipart(c *gin.Context) {
 func (api *API) registerProtos(c *gin.Context) {
 	// Check if this is a multipart form (file upload) or JSON (path-based)
 	contentType := c.GetHeader("Content-Type")
-	
+
 	if strings.Contains(contentType, "multipart/form-data") {
 		// Handle file upload
 		api.registerProtosFromUpload(c)
@@ -201,7 +201,7 @@ func (api *API) registerProtosFromPath(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Protobuf files registered successfully"})
 }
 
-// registerProtosFromUpload handles registration from uploaded files with relative path preservation
+// registerProtosFromUpload handles registration from uploaded files using virtual filesystem
 func (api *API) registerProtosFromUpload(c *gin.Context) {
 	// Get multipart form directly
 	form, err := c.MultipartForm()
@@ -216,29 +216,20 @@ func (api *API) registerProtosFromUpload(c *gin.Context) {
 		return
 	}
 
-	// Create temporary directory for uploaded files
-	tempDir, err := os.MkdirTemp("", "proto_upload_*")
-	if err != nil {
-		api.logger.Error().Err(err).Msg("Failed to create temp directory")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create temporary directory"})
-		return
-	}
-	defer os.RemoveAll(tempDir)
+	// Read all uploaded files into memory for virtual filesystem
+	fileContents := make(map[string][]byte)
+	var filenames []string
 
-	// Save uploaded files preserving directory structure using FormData filenames
-	var protoFiles []string
 	for _, fileHeader := range files {
-		// Use the filename from FormData as the relative path
-		relativePath := fileHeader.Filename
-		
-		// Security: sanitize path to prevent directory traversal
-		relativePath = filepath.Clean(relativePath)
-		if strings.Contains(relativePath, "..") || filepath.IsAbs(relativePath) {
-			api.logger.Warn().Str("filename", fileHeader.Filename).Msg("Skipping potentially unsafe file path")
-			continue
-		}
-		
-		if !strings.HasSuffix(relativePath, ".proto") {
+		filename := fileHeader.Filename
+
+		api.logger.Info().
+			Str("originalFilename", fileHeader.Filename).
+			Msg("Processing uploaded file")
+
+		// Security: sanitize filename to prevent issues
+		filename = filepath.Base(filename) // Use only the base filename
+		if !strings.HasSuffix(filename, ".proto") {
 			continue
 		}
 
@@ -247,69 +238,45 @@ func (api *API) registerProtosFromUpload(c *gin.Context) {
 			api.logger.Error().Err(err).Str("filename", fileHeader.Filename).Msg("Failed to open uploaded file")
 			continue
 		}
-		defer file.Close()
 
-		// Create full path in temp directory preserving directory structure
-		fullPath := filepath.Join(tempDir, relativePath)
-		
-		// Ensure parent directory exists
-		parentDir := filepath.Dir(fullPath)
-		if err := os.MkdirAll(parentDir, 0755); err != nil {
-			api.logger.Error().Err(err).Str("parentDir", parentDir).Msg("Failed to create parent directory")
-			file.Close()
-			continue
-		}
-
-		// Create temp file with proper path
-		dst, err := os.Create(fullPath)
-		if err != nil {
-			api.logger.Error().Err(err).Str("fullPath", fullPath).Msg("Failed to create temp file")
-			file.Close()
-			continue
-		}
-		defer dst.Close()
-
-		// Copy file content
-		if _, err := io.Copy(dst, file); err != nil {
-			api.logger.Error().Err(err).Str("fullPath", fullPath).Msg("Failed to copy file content")
-			file.Close()
-			dst.Close()
-			continue
-		}
-
-		protoFiles = append(protoFiles, fullPath)
-		api.logger.Info().
-			Str("filename", fileHeader.Filename).
-			Str("relativePath", relativePath).
-			Str("fullPath", fullPath).
-			Msg("Successfully saved uploaded file with directory structure")
+		// Read file content into memory
+		content, err := io.ReadAll(file)
 		file.Close()
-		dst.Close()
+		if err != nil {
+			api.logger.Error().Err(err).Str("filename", filename).Msg("Failed to read file content")
+			continue
+		}
+
+		fileContents[filename] = content
+		filenames = append(filenames, filename)
+
+		api.logger.Info().
+			Str("filename", filename).
+			Int("contentSize", len(content)).
+			Msg("Successfully loaded file into virtual filesystem")
 	}
 
-	if len(protoFiles) == 0 {
+	if len(fileContents) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No valid .proto files found in upload"})
 		return
 	}
 
-	// Log before registering
 	api.logger.Info().
-		Str("tempDir", tempDir).
-		Int("fileCount", len(protoFiles)).
-		Strs("protoFiles", protoFiles).
-		Msg("About to register proto root with directory structure")
-	
-	// Register the temp directory as a proto root (no additional include paths needed for upload)
-	if err := api.registry.RegisterRoot(tempDir, nil); err != nil {
-		api.logger.Error().Err(err).Str("tempDir", tempDir).Msg("Failed to register uploaded protos")
+		Int("fileCount", len(fileContents)).
+		Strs("filenames", filenames).
+		Msg("About to register proto files using virtual filesystem")
+
+	// Register using virtual filesystem approach
+	if err := api.registry.RegisterFromVirtualFS(fileContents); err != nil {
+		api.logger.Error().Err(err).Strs("filenames", filenames).Msg("Failed to register uploaded protos with virtual filesystem")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Protobuf files uploaded and registered successfully",
-		"fileCount": len(protoFiles),
-		"files": protoFiles,
+		"message":   "Protobuf files uploaded and registered successfully using virtual filesystem",
+		"fileCount": len(fileContents),
+		"files":     filenames,
 	})
 }
 
@@ -329,6 +296,28 @@ func (api *API) listMessages(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, messages)
+}
+
+// Get message field details
+func (api *API) getMessageFields(c *gin.Context) {
+	fqn := c.Param("fqn")
+	if fqn == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Message FQN is required"})
+		return
+	}
+
+	// Get comprehensive message fields including nested ones
+	fields, err := api.registry.GetComprehensiveMessageFields(fqn)
+	if err != nil {
+		api.logger.Error().Err(err).Str("fqn", fqn).Msg("Failed to get comprehensive message fields")
+		c.JSON(http.StatusNotFound, gin.H{"error": "Message not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"fqn":    fqn,
+		"fields": fields,
+	})
 }
 
 // Collections

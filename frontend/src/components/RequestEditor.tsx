@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Save, Eye } from 'lucide-react';
-import { Collection, Environment, MessageType, HeaderKV, BodyField, RunRequest } from '../lib/types';
-import { useRunRequest, useUpdateRequest } from '../lib/useData';
-import { HeadersEditor } from './HeadersEditor';
+import { Collection, Environment, MessageType, BodyField, HeaderKV, MessageField, RunRequest } from '../lib/types';
 import { BodyEditor } from './BodyEditor';
-import { VariablesPreview } from './VariablesPreview';
+import { HeadersEditor } from './HeadersEditor';
 import { ResponsePanel } from './ResponsePanel';
+import { VariablesPreview } from './VariablesPreview';
+import { useRunRequest, useUpdateRequest } from '../lib/useData';
+import { protoApi } from '../lib/api';
 
 interface RequestEditorProps {
   collection: Collection | null;
@@ -33,6 +34,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [response, setResponse] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [messageFields, setMessageFields] = useState<MessageField[]>([]);
 
   const runRequest = useRunRequest();
   const updateRequest = useUpdateRequest();
@@ -52,6 +54,65 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
       }
     }
   }, [collection, requestId]);
+
+  // Load message fields when proto message changes
+  useEffect(() => {
+    if (protoMessage) {
+      protoApi.getMessageFields(protoMessage)
+        .then(response => {
+          setMessageFields(response.fields);
+        })
+        .catch(err => {
+          console.error('Failed to load message fields:', err);
+          setMessageFields([]);
+        });
+    } else {
+      setMessageFields([]);
+    }
+  }, [protoMessage]);
+
+  // Generate body fields from protobuf message
+  const handleGenerateFromProto = (fields: MessageField[]) => {
+    const generatedFields: BodyField[] = fields.map(field => ({
+      path: field.path || field.name, // Use path if available, otherwise use name
+      value: getDefaultValueForField(field)
+    }));
+    setBody(generatedFields);
+  };
+
+  // Get default value for a protobuf field
+  const getDefaultValueForField = (field: MessageField): string => {
+    if (field.repeated) {
+      return '[]';
+    }
+    
+    switch (field.type) {
+      case 'string':
+        return '';
+      case 'int32':
+      case 'int64':
+      case 'uint32':
+      case 'uint64':
+      case 'sint32':
+      case 'sint64':
+      case 'fixed32':
+      case 'fixed64':
+      case 'sfixed32':
+      case 'sfixed64':
+        return '0';
+      case 'float':
+      case 'double':
+        return '0.0';
+      case 'bool':
+        return 'false';
+      case 'bytes':
+        return '';
+      case 'message':
+        return '{}';
+      default:
+        return '';
+    }
+  };
 
   // Update resolved URL when variables change
   useEffect(() => {
@@ -257,7 +318,13 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           {/* Body */}
           {method !== 'GET' && (
             <div className="flex-1 p-4 border-t border-gray-200">
-              <BodyEditor body={body} onChange={setBody} />
+              <BodyEditor
+                body={body}
+                onChange={setBody}
+                protoMessage={protoMessage}
+                messageFields={messageFields}
+                onGenerateFromProto={handleGenerateFromProto}
+              />
             </div>
           )}
         </div>
