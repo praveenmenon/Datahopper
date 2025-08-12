@@ -56,6 +56,9 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     }
   }, [collection, requestId]);
 
+  // Helper
+  const isTimestamp = (field: MessageField) => !!(field.message && field.messageType && field.messageType.includes('google.protobuf.Timestamp'));
+
   // Load message fields when proto message changes
   useEffect(() => {
     if (protoMessage) {
@@ -78,10 +81,12 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     if (body && body.length > 0) return; // don't overwrite user content
     if (!messageFields || messageFields.length === 0) return;
 
-    const generatedFields: BodyField[] = messageFields.map(field => ({
-      path: field.path || field.name,
-      value: getDefaultValueForField(field)
-    }));
+    const generatedFields: BodyField[] = messageFields
+      .filter(f => !isTimestamp(f))
+      .map(field => ({
+        path: field.path || field.name,
+        value: getDefaultValueForField(field)
+      }));
     setBody(generatedFields);
   }, [protoMessage, messageFields]);
 
@@ -90,10 +95,12 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     if (!fields || fields.length === 0) return;
     const overwrite = body.length === 0 || window.confirm('Replace current body with fields from the selected proto?');
     if (!overwrite) return;
-    const generated: BodyField[] = fields.map(f => ({
-      path: f.path || f.name,
-      value: getDefaultValueForField(f),
-    }));
+    const generated: BodyField[] = fields
+      .filter(f => !isTimestamp(f))
+      .map(f => ({
+        path: f.path || f.name,
+        value: getDefaultValueForField(f),
+      }));
     setBody(generated);
   };
 
@@ -101,6 +108,12 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const getDefaultValueForField = (field: MessageField): string => {
     if (field.repeated) {
       return '[]';
+    }
+
+    // Prefer enum default if available
+    if ((field as any).enum && Array.isArray((field as any).enumValues)) {
+      const opts = (field as any).enumValues as string[];
+      return opts[0] || '';
     }
 
     const t = (field.type || '').toUpperCase();

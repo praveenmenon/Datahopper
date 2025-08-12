@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { TopBar } from './components/TopBar';
 import { Sidebar } from './components/Sidebar';
 import { RequestEditor } from './components/RequestEditor';
-import { ResponsePanel } from './components/ResponsePanel';
 import { useCollections, useEnvironments, useMessageTypes } from './lib/useData';
 import { Collection } from './lib/types';
 
@@ -68,10 +67,6 @@ function App() {
             messageTypes={messageTypes}
             onRequestRun={handleRequestRun}
           />
-          
-          {responseData && (
-            <ResponsePanel response={responseData} isLoading={false} />
-          )}
         </div>
       </div>
     </div>

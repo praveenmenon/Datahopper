@@ -114,6 +114,8 @@ export interface MessageField {
   optional: boolean;
   message: boolean;
   messageType?: string;
+  enum?: boolean;
+  enumValues?: string[];
 }
 
 export interface MessageFieldsResponse {
