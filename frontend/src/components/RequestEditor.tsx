@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Play, Save, Eye } from 'lucide-react';
 import { Collection, Environment, MessageType, BodyField, HeaderKV, MessageField, RunRequest } from '../lib/types';
 import { BodyEditor } from './BodyEditor';
+import { NestedBodyEditor } from './NestedBodyEditor';
 import { HeadersEditor } from './HeadersEditor';
 import { ResponsePanel } from './ResponsePanel';
 import { VariablesPreview } from './VariablesPreview';
@@ -71,13 +72,29 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     }
   }, [protoMessage]);
 
-  // Generate body fields from protobuf message
-  const handleGenerateFromProto = (fields: MessageField[]) => {
-    const generatedFields: BodyField[] = fields.map(field => ({
-      path: field.path || field.name, // Use path if available, otherwise use name
+  // Auto-generate body from proto on selection if body is empty
+  useEffect(() => {
+    if (!protoMessage) return;
+    if (body && body.length > 0) return; // don't overwrite user content
+    if (!messageFields || messageFields.length === 0) return;
+
+    const generatedFields: BodyField[] = messageFields.map(field => ({
+      path: field.path || field.name,
       value: getDefaultValueForField(field)
     }));
     setBody(generatedFields);
+  }, [protoMessage, messageFields]);
+
+  // Manual generate button handler (overwrites current body)
+  const handleGenerateFromProtoClick = (fields: MessageField[]) => {
+    if (!fields || fields.length === 0) return;
+    const overwrite = body.length === 0 || window.confirm('Replace current body with fields from the selected proto?');
+    if (!overwrite) return;
+    const generated: BodyField[] = fields.map(f => ({
+      path: f.path || f.name,
+      value: getDefaultValueForField(f),
+    }));
+    setBody(generated);
   };
 
   // Get default value for a protobuf field
@@ -85,32 +102,48 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     if (field.repeated) {
       return '[]';
     }
-    
-    switch (field.type) {
-      case 'string':
+
+    const t = (field.type || '').toUpperCase();
+
+    switch (t) {
+      case 'STRING':
+      case 'TYPE_STRING':
         return '';
-      case 'int32':
-      case 'int64':
-      case 'uint32':
-      case 'uint64':
-      case 'sint32':
-      case 'sint64':
-      case 'fixed32':
-      case 'fixed64':
-      case 'sfixed32':
-      case 'sfixed64':
+      case 'INT32':
+      case 'INT64':
+      case 'UINT32':
+      case 'UINT64':
+      case 'SINT32':
+      case 'SINT64':
+      case 'FIXED32':
+      case 'FIXED64':
+      case 'SFIXED32':
+      case 'SFIXED64':
+      case 'TYPE_INT32':
+      case 'TYPE_INT64':
+      case 'TYPE_UINT32':
+      case 'TYPE_UINT64':
+      case 'TYPE_SINT32':
+      case 'TYPE_SINT64':
+      case 'TYPE_FIXED32':
+      case 'TYPE_FIXED64':
+      case 'TYPE_SFIXED32':
+      case 'TYPE_SFIXED64':
         return '0';
-      case 'float':
-      case 'double':
+      case 'FLOAT':
+      case 'DOUBLE':
+      case 'TYPE_FLOAT':
+      case 'TYPE_DOUBLE':
         return '0.0';
-      case 'bool':
+      case 'BOOL':
+      case 'TYPE_BOOL':
         return 'false';
-      case 'bytes':
+      case 'BYTES':
+      case 'TYPE_BYTES':
         return '';
-      case 'message':
-        return '{}';
       default:
-        return '';
+        // For nested messages or unknown kinds, use object placeholder
+        return field.message ? '{}' : '';
     }
   };
 
@@ -311,25 +344,33 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           </div>
 
           {/* Headers */}
-          <div className="flex-1 p-4">
+          <div className="p-4">
             <HeadersEditor headers={headers} onChange={setHeaders} />
           </div>
 
           {/* Body */}
-          {method !== 'GET' && (
-            <div className="flex-1 p-4 border-t border-gray-200">
-              <BodyEditor
-                body={body}
-                onChange={setBody}
-                protoMessage={protoMessage}
-                messageFields={messageFields}
-                onGenerateFromProto={handleGenerateFromProto}
-              />
+          {(method !== 'GET' || protoMessage) && (
+            <div className="p-4 border-t border-gray-200">
+              {messageFields && messageFields.length > 0 ? (
+                <NestedBodyEditor
+                  fields={messageFields}
+                  values={body}
+                  onChange={setBody}
+                />
+              ) : (
+                <BodyEditor
+                  body={body}
+                  onChange={setBody}
+                  protoMessage={protoMessage}
+                  messageFields={messageFields}
+                  onGenerateFromProto={handleGenerateFromProtoClick}
+                />
+              )}
             </div>
           )}
         </div>
 
-        {/* Right Panel - Variables Preview */}
+        {/* Right Panel - Variables/Preview */}
         <div className="w-80 p-4 bg-gray-50">
           <VariablesPreview 
             collection={collection}
@@ -337,8 +378,10 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
             url={url}
             headers={headers}
             body={body}
+            showResolvedBody={false}
           />
         </div>
+
       </div>
 
       {/* Response Panel */}

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { X, FileText, Folder, Upload, FolderOpen } from 'lucide-react';
 import { MessageType } from '../lib/types';
 import { protoApi } from '../lib/api';
+import { useQueryClient } from 'react-query';
 
 interface RegisterProtoModalProps {
   isOpen: boolean;
@@ -29,6 +30,8 @@ export const RegisterProtoModal: React.FC<RegisterProtoModalProps> = ({
     missingFiles?: string[];
     fullError: string;
   } | null>(null);
+
+  const queryClient = useQueryClient();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const directoryInputRef = useRef<HTMLInputElement>(null);
@@ -125,6 +128,9 @@ export const RegisterProtoModal: React.FC<RegisterProtoModalProps> = ({
         
         // Use the file upload API
         await protoApi.registerFromFiles(selectedFiles);
+        // Ensure dropdown updates immediately
+        queryClient.invalidateQueries('messageTypes');
+        queryClient.refetchQueries('messageTypes');
       } else {
         if (!path.trim()) return;
 
@@ -137,6 +143,9 @@ export const RegisterProtoModal: React.FC<RegisterProtoModalProps> = ({
           path: path.trim(),
           includePaths: includePathsArray
         });
+        // Invalidate list since the mutation lives outside this component for path mode
+        queryClient.invalidateQueries('messageTypes');
+        queryClient.refetchQueries('messageTypes');
       }
 
       // Reset form

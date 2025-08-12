@@ -160,7 +160,10 @@ export const useDeleteEnvironment = () => {
 
 // Protobuf Registry
 export const useMessageTypes = () => {
-  return useQuery<MessageType[], ApiError>('messageTypes', protoApi.listMessages);
+  return useQuery<MessageType[], ApiError>('messageTypes', protoApi.listMessages, {
+    staleTime: 0,
+    cacheTime: 0,
+  });
 };
 
 export const useRegisterProto = () => {

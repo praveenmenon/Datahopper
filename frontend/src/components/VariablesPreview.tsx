@@ -8,6 +8,7 @@ interface VariablesPreviewProps {
   url: string;
   headers: HeaderKV[];
   body: BodyField[];
+  showResolvedBody?: boolean; // new optional flag
 }
 
 export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
@@ -15,7 +16,8 @@ export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
   environment,
   url,
   headers,
-  body
+  body,
+  showResolvedBody = true,
 }) => {
   const getVariables = () => {
     const variables: Record<string, string> = {};
@@ -152,8 +154,8 @@ export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
         </div>
       )}
 
-      {/* Body Preview */}
-      {body.length > 0 && (
+      {/* Body Preview (optional) */}
+      {showResolvedBody && body.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-gray-700 mb-2">Resolved Body</h4>
           <div className="space-y-1">

@@ -40,9 +40,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setExpandedCollections(newExpanded);
   };
 
-  const handleCreateRequest = (collectionId: string) => {
+  const handleCreateRequest = async (collectionId: string) => {
     setCreatingForCollection(collectionId);
     setShowCreateRequest(true);
+    try {
+      // Best-effort refresh of proto types so dropdowns are not empty on first use
+      const res = await fetch('/api/registry/messages');
+      void res.ok;
+    } catch (_) {}
   };
 
   const handleCollectionDelete = async (collectionId: string) => {
@@ -198,7 +203,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <CreateCollectionModal
         isOpen={showCreateCollection}
         onClose={() => setShowCreateCollection(false)}
-        onCreate={createCollection.mutate}
+        onCreate={async (data) => {
+          try {
+            const created = await createCollection.mutateAsync(data);
+            // Close modal and select the new collection
+            setShowCreateCollection(false);
+            if (created?.id) {
+              onCollectionSelect(created as any);
+              // expand the new collection
+              setExpandedCollections(prev => new Set([...Array.from(prev), created.id]));
+            }
+          } catch (e) {
+            // leave modal open to show errors if any (optional: add toast)
+            console.error('Failed to create collection', e);
+          }
+        }}
         isLoading={createCollection.isLoading}
       />
 

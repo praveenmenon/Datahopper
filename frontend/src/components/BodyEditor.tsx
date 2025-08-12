@@ -51,11 +51,12 @@ export const BodyEditor: React.FC<BodyEditorProps> = ({
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-gray-900">Request Body</h3>
         <div className="flex space-x-2">
-          {protoMessage && onGenerateFromProto && messageFields && messageFields.length > 0 && (
+          {protoMessage && onGenerateFromProto && (
             <button
-              onClick={() => onGenerateFromProto(messageFields)}
-              className="inline-flex items-center text-xs text-blue-600 hover:text-blue-700 transition-colors"
-              title="Generate fields from protobuf message"
+              onClick={() => messageFields && messageFields.length > 0 && onGenerateFromProto(messageFields)}
+              disabled={!messageFields || messageFields.length === 0}
+              className={`inline-flex items-center text-xs ${(!messageFields || messageFields.length === 0) ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-700'} transition-colors`}
+              title={!messageFields || messageFields.length === 0 ? 'Loading proto fields…' : 'Generate fields from protobuf message'}
             >
               <Zap className="h-3 w-3 mr-1" />
               Generate from Proto
