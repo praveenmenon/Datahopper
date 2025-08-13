@@ -21,6 +21,7 @@ export interface Request {
   url: string;
   protoMessage?: string;
   responseType?: string;
+  errorResponseType?: string;
   headers: HeaderKV[];
   body: BodyField[];
   timeoutSeconds?: number;
@@ -58,6 +59,7 @@ export interface CreateRequestRequest {
   url: string;
   protoMessage?: string;
   responseType?: string;
+  errorResponseType?: string;
   headers?: HeaderKV[];
   body?: BodyField[];
   timeoutSeconds?: number;
@@ -69,6 +71,7 @@ export interface UpdateRequestRequest {
   url?: string;
   protoMessage?: string;
   responseType?: string;
+  errorResponseType?: string;
   headers?: HeaderKV[];
   body?: BodyField[];
   timeoutSeconds?: number;
@@ -79,6 +82,7 @@ export interface RunRequest {
   url: string;
   protoMessage?: string;
   responseType?: string;
+  errorResponseType?: string;
   headers: Record<string, string>;
   body: BodyField[];
   timeoutSeconds?: number;
@@ -90,6 +94,7 @@ export interface RunResponse {
   headers: Record<string, string>;
   decoded?: string;
   raw?: string;
+  decodeError?: string;
 }
 
 // Registry types

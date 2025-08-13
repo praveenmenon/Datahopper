@@ -66,7 +66,8 @@ func (s *Service) CreateRequest(collectionID string, req *types.CreateRequestReq
 		Method:         req.Method,
 		URL:            req.URL,
 		ProtoMessage:   req.ProtoMessage,
-		ResponseType:   req.ResponseType,
+        ResponseType:   req.ResponseType,
+        ErrorResponseType: req.ErrorResponseType,
 		Headers:        req.Headers,
 		Body:           req.Body,
 		TimeoutSeconds: req.TimeoutSeconds,
@@ -110,6 +111,9 @@ func (s *Service) UpdateRequest(collectionID string, req *types.UpdateRequestReq
 	if req.ResponseType != "" {
 		existing.ResponseType = req.ResponseType
 	}
+    if req.ErrorResponseType != "" {
+        existing.ErrorResponseType = req.ErrorResponseType
+    }
 	if req.Headers != nil {
 		existing.Headers = req.Headers
 	}
