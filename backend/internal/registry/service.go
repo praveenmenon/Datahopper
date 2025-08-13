@@ -374,7 +374,7 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 			fi := map[string]interface{}{
 				"name":     string(fd.Name()),
 				"number":   int32(fd.Number()),
-				"type":     string(fd.Kind()),
+				"type":     fd.Kind().String(),
 				"repeated": fd.IsList(),
 				"optional": fd.HasPresence(),
 				"message":  fd.Message() != nil,
@@ -526,7 +526,7 @@ func (s *Service) extractComprehensiveFieldsFromProtoreflect(msg protoreflect.Me
 			"path":     fieldPath,
 			"name":     string(fd.Name()),
 			"number":   int32(fd.Number()),
-			"type":     string(fd.Kind()),
+			"type":     fd.Kind().String(),
 			"repeated": fd.IsList(),
 			"optional": fd.HasPresence(),
 			"message":  fd.Message() != nil,

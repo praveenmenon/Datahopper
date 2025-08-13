@@ -21,10 +21,13 @@ function App() {
   // Restore previously selected environment on first load
   useEffect(() => {
     const stored = localStorage.getItem('activeEnvironment');
-    if (stored) {
-      setActiveEnvironment(stored);
+    if (stored && !environmentsLoading && environments.length > 0) {
+      // Only restore if the environment exists in the loaded environments
+      if (environments.find(e => e.name === stored)) {
+        setActiveEnvironment(stored);
+      }
     }
-  }, []);
+  }, [environmentsLoading, environments]);
 
   // Persist active environment selection
   useEffect(() => {
@@ -40,6 +43,10 @@ function App() {
     if (!environmentsLoading) {
       if (activeEnvironment && !environments.find(e => e.name === activeEnvironment)) {
         setActiveEnvironment('');
+      }
+      // If no environment is selected and there are environments available, select the first one
+      if (!activeEnvironment && environments.length > 0) {
+        setActiveEnvironment(environments[0].name);
       }
     }
   }, [environmentsLoading, environments, activeEnvironment]);

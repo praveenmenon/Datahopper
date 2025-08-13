@@ -112,14 +112,14 @@ func TestSetByPath(t *testing.T) {
 func TestBuildFromFields(t *testing.T) {
 	tests := []struct {
 		name   string
-		fields []BodyField
+		fields []interface{}
 		want   map[string]interface{}
 	}{
 		{
 			name: "simple fields",
-			fields: []BodyField{
-				{Path: "name", Value: "John"},
-				{Path: "age", Value: "30"},
+			fields: []interface{}{
+				map[string]interface{}{"path": "name", "value": "John"},
+				map[string]interface{}{"path": "age", "value": "30"},
 			},
 			want: map[string]interface{}{
 				"name": "John",
@@ -128,9 +128,9 @@ func TestBuildFromFields(t *testing.T) {
 		},
 		{
 			name: "nested fields",
-			fields: []BodyField{
-				{Path: "user.name", Value: "John"},
-				{Path: "user.age", Value: "30"},
+			fields: []interface{}{
+				map[string]interface{}{"path": "user.name", "value": "John"},
+				map[string]interface{}{"path": "user.age", "value": "30"},
 			},
 			want: map[string]interface{}{
 				"user": map[string]interface{}{
@@ -141,9 +141,9 @@ func TestBuildFromFields(t *testing.T) {
 		},
 		{
 			name: "array fields",
-			fields: []BodyField{
-				{Path: "tags[0]", Value: "tag1"},
-				{Path: "tags[1]", Value: "tag2"},
+			fields: []interface{}{
+				map[string]interface{}{"path": "tags[0]", "value": "tag1"},
+				map[string]interface{}{"path": "tags[1]", "value": "tag2"},
 			},
 			want: map[string]interface{}{
 				"tags": []interface{}{"tag1", "tag2"},
@@ -151,11 +151,11 @@ func TestBuildFromFields(t *testing.T) {
 		},
 		{
 			name: "complex nested with arrays",
-			fields: []BodyField{
-				{Path: "user.name", Value: "John"},
-				{Path: "user.emails[0].address", Value: "home@example.com"},
-				{Path: "user.emails[1].address", Value: "work@example.com"},
-				{Path: "user.emails[1].type", Value: "work"},
+			fields: []interface{}{
+				map[string]interface{}{"path": "user.name", "value": "John"},
+				map[string]interface{}{"path": "user.emails[0].address", "value": "home@example.com"},
+				map[string]interface{}{"path": "user.emails[1].address", "value": "work@example.com"},
+				map[string]interface{}{"path": "user.emails[1].type", "value": "work"},
 			},
 			want: map[string]interface{}{
 				"user": map[string]interface{}{
@@ -174,7 +174,7 @@ func TestBuildFromFields(t *testing.T) {
 		},
 		{
 			name: "empty fields",
-			fields: []BodyField{},
+			fields: []interface{}{},
 			want:   map[string]interface{}{},
 		},
 		{
@@ -186,7 +186,11 @@ func TestBuildFromFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BuildFromFields(tt.fields)
+			got, err := BuildFromFields(tt.fields)
+			if err != nil {
+				t.Errorf("BuildFromFields() error = %v", err)
+				return
+			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("BuildFromFields() = %v, want %v", got, tt.want)
 			}

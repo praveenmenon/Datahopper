@@ -85,30 +85,32 @@ export const HeadersEditor: React.FC<HeadersEditorProps> = ({ headers, onChange,
       ) : (
         <div className="space-y-2">
           {headers.map((header, index) => (
-            <div key={index} className="flex items-center gap-4">
+            <div key={index} className="grid grid-cols-3 gap-4 items-center">
               <HeaderKeyInput
                 value={header.key}
                 onChange={(val) => updateHeader(index, 'key', val)}
                 suggestions={COMMON_HEADER_KEYS}
                 placeholder="Header name (e.g., Authorization)"
-                className="w-56 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                containerClassName="w-56"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                containerClassName="w-full"
               />
               <VariableAwareInput
                 value={header.value}
                 onChange={(e) => updateHeader(index, 'value', (e.target as HTMLInputElement).value)}
                 placeholder="Header value (supports {{variables}})"
-                className=""
-                containerClassName="flex-1"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                containerClassName="w-full"
                 variables={variables || {}}
               />
-              <button
-                onClick={() => removeHeader(index)}
-                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                title="Remove header"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => removeHeader(index)}
+                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                  title="Remove header"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           ))}
           {/* Combobox handles suggestions; datalist removed intentionally */}
