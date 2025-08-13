@@ -28,6 +28,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [url, setUrl] = useState('');
   const [protoMessage, setProtoMessage] = useState('');
   const [responseType, setResponseType] = useState('');
+  const [errorResponseType, setErrorResponseType] = useState('');
   const [timeoutSeconds, setTimeoutSeconds] = useState(30);
   const [headers, setHeaders] = useState<HeaderKV[]>([]);
   const [body, setBody] = useState<BodyField[]>([]);
@@ -49,6 +50,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         setUrl(request.url);
         setProtoMessage(request.protoMessage || '');
         setResponseType(request.responseType || '');
+        setErrorResponseType((request as any).errorResponseType || '');
         setTimeoutSeconds(request.timeoutSeconds || 30);
         setHeaders(request.headers || []);
         setBody(request.body || []);
@@ -203,6 +205,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         url,
         protoMessage: protoMessage || undefined,
         responseType: responseType || undefined,
+        errorResponseType: errorResponseType || undefined,
         headers: headersMap,
         body,
         timeoutSeconds,
@@ -229,6 +232,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         url,
         protoMessage: protoMessage || undefined,
         responseType: responseType || undefined,
+        errorResponseType: errorResponseType || undefined,
         headers,
         body,
         timeoutSeconds
@@ -322,7 +326,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           {/* Protobuf Configuration */}
           <div className="border-b border-gray-200 p-4">
             <h3 className="text-sm font-medium text-gray-900 mb-3">Protobuf Configuration</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Request Message Type
@@ -340,11 +344,26 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Response Message Type
+                  Success Response Message Type
                 </label>
                 <select
                   value={responseType}
                   onChange={(e) => setResponseType(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="">Select message type</option>
+                  {messageTypes.map((msg, index) => (
+                    <option key={index} value={msg.fqName}>{msg.fqName}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Error Response Message Type
+                </label>
+                <select
+                  value={errorResponseType}
+                  onChange={(e) => setErrorResponseType(e.target.value)}
                   className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
                   <option value="">Select message type</option>

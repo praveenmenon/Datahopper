@@ -9,7 +9,8 @@ type RunReq struct {
 	Method          string                    `json:"method" binding:"required"`
 	URL             string                    `json:"url" binding:"required"`
 	ProtoMessage    string                    `json:"protoMessage,omitempty"`    // FQN of request message type
-	ResponseType    string                    `json:"responseType,omitempty"`    // FQN of response message type
+    ResponseType    string                    `json:"responseType,omitempty"`    // FQN of success response message type
+    ErrorResponseType string                  `json:"errorResponseType,omitempty"` // FQN of error response message type
 	Headers         map[string]string         `json:"headers"`
 	Body            []types.BodyField     `json:"body"`
 	TimeoutSeconds  int                       `json:"timeoutSeconds"`
@@ -22,6 +23,7 @@ type RunRes struct {
 	Headers map[string]string `json:"headers"`
 	Decoded string            `json:"decoded,omitempty"` // JSON representation if protobuf response
 	Raw     string            `json:"raw,omitempty"`     // Raw response body
+    DecodeError string        `json:"decodeError,omitempty"`
 }
 
 // RequestContext contains the context for executing a request
@@ -32,7 +34,8 @@ type RequestContext struct {
 	Body            interface{}
 	TimeoutSeconds  int
 	ProtoMessage    string
-	ResponseType    string
+    ResponseType    string
+    ErrorResponseType string
 }
 
 // ResponseContext contains the response data

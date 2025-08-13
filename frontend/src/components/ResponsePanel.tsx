@@ -6,6 +6,7 @@ interface ResponseData {
   headers: Record<string, string>;
   decoded?: string;
   raw?: string;
+  decodeError?: string;
 }
 
 interface ResponsePanelProps {
@@ -93,6 +94,12 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
             Response received
           </div>
         </div>
+        {response.decodeError && (
+          <div className="mt-3 text-xs text-yellow-800 bg-yellow-50 border border-yellow-200 rounded p-2">
+            Could not decode using the selected message type. Showing raw body.
+            <div className="mt-1 font-mono break-all">{response.decodeError}</div>
+          </div>
+        )}
       </div>
 
       {/* Response Content */}

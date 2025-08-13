@@ -27,7 +27,8 @@ type Request struct {
 	Method          string       `json:"method"`
 	URL             string       `json:"url"`
 	ProtoMessage    string       `json:"protoMessage,omitempty"`    // FQN of request message type
-	ResponseType    string       `json:"responseType,omitempty"`    // FQN of response message type
+    ResponseType    string       `json:"responseType,omitempty"`    // FQN of success response message type
+    ErrorResponseType string     `json:"errorResponseType,omitempty"` // FQN of error response message type
 	Headers         []HeaderKV   `json:"headers"`
 	Body            []BodyField  `json:"body"`
 	TimeoutSeconds  int          `json:"timeoutSeconds"`
@@ -67,7 +68,8 @@ type CreateRequestRequest struct {
 	Method         string       `json:"method" binding:"required"`
 	URL            string       `json:"url" binding:"required"`
 	ProtoMessage   string       `json:"protoMessage"`
-	ResponseType   string       `json:"responseType"`
+    ResponseType   string       `json:"responseType"`
+    ErrorResponseType string    `json:"errorResponseType"`
 	Headers        []HeaderKV   `json:"headers"`
 	Body           []BodyField  `json:"body"`
 	TimeoutSeconds int          `json:"timeoutSeconds"`
@@ -79,7 +81,8 @@ type UpdateRequestRequest struct {
 	Method         string       `json:"method"`
 	URL            string       `json:"url"`
 	ProtoMessage   string       `json:"protoMessage"`
-	ResponseType   string       `json:"responseType"`
+    ResponseType   string       `json:"responseType"`
+    ErrorResponseType string    `json:"errorResponseType"`
 	Headers        []HeaderKV   `json:"headers"`
 	Body           []BodyField  `json:"body"`
 	TimeoutSeconds int          `json:"timeoutSeconds"`

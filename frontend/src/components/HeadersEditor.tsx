@@ -1,4 +1,5 @@
 import React from 'react';
+import { HeaderKeyInput } from './HeaderKeyInput';
 import { Plus, Trash2 } from 'lucide-react';
 import { HeaderKV } from '../lib/types';
 
@@ -8,6 +9,31 @@ interface HeadersEditorProps {
 }
 
 export const HeadersEditor: React.FC<HeadersEditorProps> = ({ headers, onChange }) => {
+  // Common request header suggestions (not exhaustive)
+  const COMMON_HEADER_KEYS = [
+    'Authorization',
+    'Content-Type',
+    'Accept',
+    'Accept-Encoding',
+    'Accept-Language',
+    'User-Agent',
+    'Cache-Control',
+    'Pragma',
+    'If-None-Match',
+    'If-Match',
+    'If-Modified-Since',
+    'If-Unmodified-Since',
+    'ETag',
+    'Origin',
+    'Referer',
+    'Cookie',
+    'X-Request-Id',
+    'X-Correlation-Id',
+    'X-API-Key',
+    // Proto-friendly defaults
+    'Accept: application/x-protobuf',
+    'Content-Type: application/x-protobuf'
+  ];
   const addHeader = () => {
     onChange([...headers, { key: '', value: '' }]);
   };
@@ -57,13 +83,14 @@ export const HeadersEditor: React.FC<HeadersEditorProps> = ({ headers, onChange 
       ) : (
         <div className="space-y-2">
           {headers.map((header, index) => (
-            <div key={index} className="flex items-center space-x-2">
-              <input
-                type="text"
+            <div key={index} className="flex items-center gap-2">
+              <HeaderKeyInput
                 value={header.key}
-                onChange={(e) => updateHeader(index, 'key', e.target.value)}
+                onChange={(val) => updateHeader(index, 'key', val)}
+                suggestions={COMMON_HEADER_KEYS}
                 placeholder="Header name (e.g., Authorization)"
-                className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                containerClassName="flex-1"
               />
               <input
                 type="text"
@@ -81,6 +108,7 @@ export const HeadersEditor: React.FC<HeadersEditorProps> = ({ headers, onChange 
               </button>
             </div>
           ))}
+          {/* Combobox handles suggestions; datalist removed intentionally */}
         </div>
       )}
 

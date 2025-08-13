@@ -56,8 +56,8 @@ func (s *Service) Run(req *RunReq) (*RunRes, error) {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 
-	// Process response
-	result, err := s.processResponse(resp, req.ResponseType)
+    // Process response
+    result, err := s.processResponse(resp, req.ResponseType, req.ErrorResponseType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process response: %w", err)
 	}
@@ -136,14 +136,15 @@ func (s *Service) buildRequestContext(req *RunReq) (*RequestContext, error) {
 		timeout = 30 // Default 30 seconds
 	}
 
-	return &RequestContext{
+    return &RequestContext{
 		Method:         req.Method,
 		URL:            interpolatedURL,
 		Headers:        interpolatedHeaders,
 		Body:           body,
 		TimeoutSeconds: timeout,
 		ProtoMessage:   req.ProtoMessage,
-		ResponseType:   req.ResponseType,
+        ResponseType:   req.ResponseType,
+        ErrorResponseType: req.ErrorResponseType,
 	}, nil
 }
 
@@ -368,21 +369,35 @@ func (s *Service) executeRequest(ctx *RequestContext) (*ResponseContext, error) 
 }
 
 // processResponse processes the HTTP response
-func (s *Service) processResponse(resp *ResponseContext, responseType string) (*RunRes, error) {
+func (s *Service) processResponse(resp *ResponseContext, responseType string, errorResponseType string) (*RunRes, error) {
 	result := &RunRes{
 		Status:  resp.Status,
 		Headers: resp.Headers,
 	}
 
-	// Try to decode protobuf response if specified
-	if responseType != "" && s.isProtobufResponse(resp.ContentType) {
-		decoded, err := s.decodeProtobufResponse(responseType, resp.Body)
-		if err != nil {
-			s.logger.Warn().Err(err).Msg("Failed to decode protobuf response, using raw")
-			result.Raw = string(resp.Body)
-		} else {
-			result.Decoded = decoded
-		}
+    // Pick which message type to use for decoding: success 2xx -> responseType, else errorResponseType if provided
+    selectedType := responseType
+    if resp.Status < 200 || resp.Status >= 300 {
+        if errorResponseType != "" {
+            selectedType = errorResponseType
+        }
+    }
+
+    // Try to decode protobuf response if specified
+    if selectedType != "" && s.isProtobufResponse(resp.ContentType) {
+        decoded, err := s.decodeProtobufResponse(selectedType, resp.Body)
+        if err != nil {
+            s.logger.Warn().Err(err).Msg("Failed to decode protobuf response, using raw")
+            result.Raw = string(resp.Body)
+            result.DecodeError = err.Error()
+        } else {
+            result.Decoded = decoded
+            // Heuristic: decoded to an empty structure though body had content → likely wrong type
+            trimmed := strings.TrimSpace(decoded)
+            if len(resp.Body) > 0 && (trimmed == "{}" || trimmed == "[]") {
+                result.DecodeError = "Decoded to an empty structure; the selected message type may be incorrect."
+            }
+        }
 	} else {
 		// Use raw response
 		result.Raw = string(resp.Body)
