@@ -46,15 +46,6 @@ func NewInMemoryStore() *InMemoryStore {
 		nextID:       1,
 	}
 
-	// Seed with default environment
-	store.environments["local"] = &types.Environment{
-		Name: "local",
-		Variables: map[string]string{
-			"base_url": "http://localhost:8080",
-			"auth":     "Bearer your-token-here",
-		},
-	}
-
 	return store
 }
 

@@ -9,6 +9,7 @@ interface VariablesPreviewProps {
   headers: HeaderKV[];
   body: BodyField[];
   showResolvedBody?: boolean; // new optional flag
+  variablesOverride?: Record<string, string>;
 }
 
 export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
@@ -18,8 +19,10 @@ export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
   headers,
   body,
   showResolvedBody = true,
+  variablesOverride,
 }) => {
   const getVariables = () => {
+    if (variablesOverride) return variablesOverride;
     const variables: Record<string, string> = {};
     
     // Collection variables (base)

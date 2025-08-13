@@ -47,10 +47,13 @@ export const TopBar: React.FC<TopBarProps> = ({
               </label>
               <select
                 id="environment"
-                value={activeEnvironment}
+                value={activeEnvironment || ''}
                 onChange={handleEnvironmentChange}
                 className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
+                {environments.length === 0 && (
+                  <option value="" disabled>(no environments)</option>
+                )}
                 {environments.map((env) => (
                   <option key={env.name} value={env.name}>
                     {env.name}
@@ -84,6 +87,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         isLoading={registerProto.isLoading}
         messageTypes={messageTypes}
       />
+
     </>
   );
 };
