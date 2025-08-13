@@ -140,14 +140,14 @@ export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
               <div key={index} className="text-xs">
                 <div className="flex justify-between">
                   <span className="font-medium">{header.key || 'Unnamed'}</span>
-                  {hasUnresolvedVariables(header.value) && (
+                  {hasUnresolvedVariables(header.resolvedValue) && (
                     <span className="text-yellow-600 text-xs">Unresolved</span>
                   )}
                 </div>
                 <code className={`block text-xs p-1 rounded font-mono break-all ${
-                  hasUnresolvedVariables(header.value) 
+                  hasUnresolvedVariables(header.resolvedValue) 
                     ? 'bg-yellow-100 text-yellow-800' 
-                    : 'bg-gray-100'
+                    : 'bg-green-100 text-green-800'
                 }`}>
                   {header.resolvedValue || '(empty)'}
                 </code>
@@ -166,14 +166,14 @@ export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
               <div key={index} className="text-xs">
                 <div className="flex justify-between">
                   <span className="font-mono">{field.path || 'Unnamed'}</span>
-                  {hasUnresolvedVariables(field.value) && (
+                  {hasUnresolvedVariables(field.resolvedValue) && (
                     <span className="text-yellow-600 text-xs">Unresolved</span>
                   )}
                 </div>
                 <code className={`block text-xs p-1 rounded font-mono break-all ${
-                  hasUnresolvedVariables(field.value) 
+                  hasUnresolvedVariables(field.resolvedValue) 
                     ? 'bg-yellow-100 text-yellow-800' 
-                    : 'bg-gray-100'
+                    : 'bg-green-100 text-green-800'
                 }`}>
                   {field.resolvedValue || '(empty)'}
                 </code>
