@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Play, Save, Eye } from 'lucide-react';
 import { Collection, Environment, MessageType, BodyField, HeaderKV, MessageField, RunRequest } from '../lib/types';
 import { BodyEditor } from './BodyEditor';
+import { VariableAwareInput } from './VariableAwareInput';
 import { NestedBodyEditor } from './NestedBodyEditor';
 import { HeadersEditor } from './HeadersEditor';
 import { ResponsePanel } from './ResponsePanel';
@@ -162,18 +163,18 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     }
   };
 
-  // Update resolved URL when variables change
+  // Update resolved URL when variables change (env overrides collection)
   useEffect(() => {
-    if (url && environment) {
-      let resolved = url;
-      Object.entries(environment.variables).forEach(([key, value]) => {
-        resolved = resolved.replace(new RegExp(`{{${key}}}`, 'g'), value);
-      });
-      setResolvedUrl(resolved);
-    } else {
-      setResolvedUrl(url);
-    }
-  }, [url, environment]);
+    let resolved = url || '';
+    const merged: Record<string, string> = {};
+    if (collection?.variables) Object.assign(merged, collection.variables);
+    if (environment?.variables) Object.assign(merged, environment.variables);
+    
+    Object.entries(merged).forEach(([k, v]) => {
+      resolved = resolved.replace(new RegExp(`{{${k}}}`, 'g'), v);
+    });
+    setResolvedUrl(resolved);
+  }, [url, environment, collection]);
 
   const handleSend = async () => {
     if (!url.trim()) return;
@@ -278,12 +279,14 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
 
           {/* URL Input */}
           <div className="flex-1">
-            <input
-              type="text"
+            <VariableAwareInput
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => setUrl((e.target as HTMLInputElement).value)}
               placeholder="Enter URL (supports {{variables}})"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              variables={{
+                ...(collection?.variables || {}),
+                ...(environment?.variables || {}),
+              }}
             />
           </div>
 
@@ -377,7 +380,10 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
 
           {/* Headers */}
           <div className="p-4">
-            <HeadersEditor headers={headers} onChange={setHeaders} />
+            <HeadersEditor headers={headers} onChange={setHeaders} variables={{
+              ...(collection?.variables || {}),
+              ...(environment?.variables || {}),
+            }} />
           </div>
 
           {/* Body */}
@@ -411,6 +417,10 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
             headers={headers}
             body={body}
             showResolvedBody={false}
+            variablesOverride={(environment?.variables || collection?.variables) ? {
+              ...(collection?.variables || {}),
+              ...(environment?.variables || {}),
+            } : undefined}
           />
         </div>
 

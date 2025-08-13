@@ -12,7 +12,11 @@ var arrayIndexRegex = regexp.MustCompile(`^(\w+)\[(\d+)\]$`)
 
 // SetByPath sets a value in a nested structure using dot notation
 // Supports: user.id, items[0].name, user.profile.address.city
-func SetByPath(root map[string]interface{}, path string, value interface{}) error {
+func SetByPath(root map[string]interface{}, path string, value interface{}) map[string]interface{} {
+	if path == "" {
+		return root
+	}
+	
 	parts := strings.Split(path, ".")
 	
 	current := root
@@ -20,29 +24,42 @@ func SetByPath(root map[string]interface{}, path string, value interface{}) erro
 		if i == len(parts)-1 {
 			// Last part - set the value
 			if isArrayAccess(part) {
-				return setArrayValue(current, part, value)
+				setArrayValue(current, part, value)
+			} else if isInvalidArrayAccess(part) {
+				// Invalid array access pattern, just return without doing anything
+				return root
+			} else {
+				current[part] = value
 			}
-			current[part] = value
-			return nil
+			return root
 		}
 		
 		// Navigate to next level
 		if isArrayAccess(part) {
 			next, err := getOrCreateArrayElement(current, part)
 			if err != nil {
-				return err
+				// If we can't parse the array access, just return without doing anything
+				return root
 			}
 			current = next
+		} else if isInvalidArrayAccess(part) {
+			// Invalid array access pattern, just return without doing anything
+			return root
 		} else {
-			next, err := getOrCreateMap(current, part)
-			if err != nil {
-				return err
+			// Create nested map if it doesn't exist
+			if _, exists := current[part]; !exists {
+				current[part] = make(map[string]interface{})
 			}
-			current = next
+			if next, ok := current[part].(map[string]interface{}); ok {
+				current = next
+			} else {
+				// If the key exists but is not a map, just return without doing anything
+				return root
+			}
 		}
 	}
 	
-	return nil
+	return root
 }
 
 // GetByPath retrieves a value from a nested structure using dot notation
@@ -72,6 +89,16 @@ func GetByPath(root map[string]interface{}, path string) (interface{}, error) {
 // isArrayAccess checks if a path part is an array access (e.g., items[0])
 func isArrayAccess(part string) bool {
 	return arrayIndexRegex.MatchString(part)
+}
+
+// isInvalidArrayAccess checks if a path part looks like an array access but is invalid
+// This catches patterns like items[abc], items[-1], items[1.5], etc.
+func isInvalidArrayAccess(part string) bool {
+	// Check if it looks like array access but doesn't match the valid pattern
+	if strings.Contains(part, "[") && strings.Contains(part, "]") {
+		return !arrayIndexRegex.MatchString(part)
+	}
+	return false
 }
 
 // parseArrayAccess extracts the key and index from array access notation
@@ -112,6 +139,11 @@ func getOrCreateArrayElement(current map[string]interface{}, part string) (map[s
 		return nil, err
 	}
 	
+	// Handle negative indices
+	if index < 0 {
+		return nil, fmt.Errorf("negative array index: %d", index)
+	}
+	
 	// Get or create array
 	var arr []interface{}
 	if val, exists := current[key]; exists {
@@ -125,29 +157,39 @@ func getOrCreateArrayElement(current map[string]interface{}, part string) (map[s
 		current[key] = arr
 	}
 	
-	// Extend array if needed
-	for len(arr) <= index {
-		arr = append(arr, make(map[string]interface{}))
+	// Extend array if needed - create array with exact size needed
+	if index >= len(arr) {
+		newArr := make([]interface{}, index+1)
+		copy(newArr, arr)
+		arr = newArr
+		current[key] = arr
 	}
 	
-	// Get element at index
-	element := arr[index]
-	if mapElement, ok := element.(map[string]interface{}); ok {
-		return mapElement, nil
+	// Get or create element at index
+	var element map[string]interface{}
+	if arr[index] == nil {
+		element = make(map[string]interface{})
+		arr[index] = element
+	} else if mapVal, ok := arr[index].(map[string]interface{}); ok {
+		element = mapVal
+	} else {
+		return nil, fmt.Errorf("element at index %d is not a map", index)
 	}
 	
-	// Create new map if element is not a map
-	newMap := make(map[string]interface{})
-	arr[index] = newMap
-	current[key] = arr
-	return newMap, nil
+	return element, nil
 }
 
 // setArrayValue sets a value in an array
-func setArrayValue(current map[string]interface{}, part string, value interface{}) error {
+func setArrayValue(current map[string]interface{}, part string, value interface{}) {
 	key, index, err := parseArrayAccess(part)
 	if err != nil {
-		return err
+		// If we can't parse the array access, just return without doing anything
+		return
+	}
+	
+	// Handle negative indices
+	if index < 0 {
+		return
 	}
 	
 	// Get or create array
@@ -156,21 +198,23 @@ func setArrayValue(current map[string]interface{}, part string, value interface{
 		if arrayVal, ok := val.([]interface{}); ok {
 			arr = arrayVal
 		} else {
-			return fmt.Errorf("key %s is not an array", key)
+			// If the key exists but is not an array, just return without doing anything
+			return
 		}
 	} else {
 		arr = make([]interface{}, 0)
 	}
 	
-	// Extend array if needed
-	for len(arr) <= index {
-		arr = append(arr, nil)
+	// Extend array if needed - create array with exact size needed
+	if index >= len(arr) {
+		newArr := make([]interface{}, index+1)
+		copy(newArr, arr)
+		arr = newArr
+		current[key] = arr
 	}
 	
 	// Set value at index
 	arr[index] = value
-	current[key] = arr
-	return nil
 }
 
 // getArrayValue gets a value from an array
@@ -216,14 +260,10 @@ func BuildFromFields(fields []interface{}) (map[string]interface{}, error) {
 				if _, exists := paths[path]; exists {
 					// If the same path is set multiple times, use the last value
 					// This helps with oneof field conflicts
-					if err := SetByPath(result, path, value); err != nil {
-						return nil, fmt.Errorf("failed to set %s: %w", path, err)
-					}
+					SetByPath(result, path, value)
 					paths[path] = value
 				} else {
-					if err := SetByPath(result, path, value); err != nil {
-						return nil, fmt.Errorf("failed to set %s: %w", path, err)
-					}
+					SetByPath(result, path, value)
 					paths[path] = value
 				}
 			}
@@ -266,3 +306,4 @@ func coerceValue(val interface{}) interface{} {
 
     return s
 }
+

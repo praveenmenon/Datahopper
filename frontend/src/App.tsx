@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TopBar } from './components/TopBar';
 import { Sidebar } from './components/Sidebar';
 import { RequestEditor } from './components/RequestEditor';
@@ -8,8 +8,7 @@ import { Collection } from './lib/types';
 function App() {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<string | null>(null);
-  const [activeEnvironment, setActiveEnvironment] = useState<string>('local');
-  const [responseData, setResponseData] = useState<any>(null);
+  const [activeEnvironment, setActiveEnvironment] = useState<string>('');
 
   // Data fetching
   const { data: collections = [], isLoading: collectionsLoading } = useCollections();
@@ -17,6 +16,39 @@ function App() {
   const { data: messageTypes = [], isLoading: messageTypesLoading } = useMessageTypes();
 
   const currentEnvironment = environments.find(env => env.name === activeEnvironment);
+
+  // Restore previously selected environment on first load
+  useEffect(() => {
+    const stored = localStorage.getItem('activeEnvironment');
+    if (stored && !environmentsLoading && environments.length > 0) {
+      // Only restore if the environment exists in the loaded environments
+      if (environments.find(e => e.name === stored)) {
+        setActiveEnvironment(stored);
+      }
+    }
+  }, [environmentsLoading, environments]);
+
+  // Persist active environment selection
+  useEffect(() => {
+    if (activeEnvironment) {
+      localStorage.setItem('activeEnvironment', activeEnvironment);
+    } else {
+      localStorage.removeItem('activeEnvironment');
+    }
+  }, [activeEnvironment]);
+
+  // If the stored/active environment no longer exists, clear it
+  useEffect(() => {
+    if (!environmentsLoading) {
+      if (activeEnvironment && !environments.find(e => e.name === activeEnvironment)) {
+        setActiveEnvironment('');
+      }
+      // If no environment is selected and there are environments available, select the first one
+      if (!activeEnvironment && environments.length > 0) {
+        setActiveEnvironment(environments[0].name);
+      }
+    }
+  }, [environmentsLoading, environments, activeEnvironment]);
 
   const handleRequestSelect = (collectionId: string, requestId: string) => {
     const collection = collections.find(c => c.id === collectionId);
@@ -26,8 +58,8 @@ function App() {
     }
   };
 
-  const handleRequestRun = (response: any) => {
-    setResponseData(response);
+  const handleRequestRun = () => {
+    // Response handling can be added here in the future
   };
 
   if (collectionsLoading || environmentsLoading || messageTypesLoading) {
@@ -46,17 +78,22 @@ function App() {
       <TopBar 
         environments={environments}
         activeEnvironment={activeEnvironment}
-        onEnvironmentChange={setActiveEnvironment}
+        onEnvironmentChange={(name) => {
+          setActiveEnvironment(name);
+          if (name) localStorage.setItem('activeEnvironment', name);
+        }}
         messageTypes={messageTypes}
       />
       
       <div className="flex h-screen pt-16">
-        <Sidebar 
+          <Sidebar 
           collections={collections}
           selectedCollection={selectedCollection}
           selectedRequest={selectedRequest}
           onRequestSelect={handleRequestSelect}
           onCollectionSelect={setSelectedCollection}
+          environments={environments}
+          onEnvironmentCreated={(name) => { setActiveEnvironment(name); localStorage.setItem('activeEnvironment', name); }}
         />
         
         <div className="flex-1 flex flex-col">

@@ -1,14 +1,16 @@
 import React from 'react';
 import { HeaderKeyInput } from './HeaderKeyInput';
+import { VariableAwareInput } from './VariableAwareInput';
 import { Plus, Trash2 } from 'lucide-react';
 import { HeaderKV } from '../lib/types';
 
 interface HeadersEditorProps {
   headers: HeaderKV[];
   onChange: (headers: HeaderKV[]) => void;
+  variables?: Record<string, string>;
 }
 
-export const HeadersEditor: React.FC<HeadersEditorProps> = ({ headers, onChange }) => {
+export const HeadersEditor: React.FC<HeadersEditorProps> = ({ headers, onChange, variables }) => {
   // Common request header suggestions (not exhaustive)
   const COMMON_HEADER_KEYS = [
     'Authorization',
@@ -83,29 +85,32 @@ export const HeadersEditor: React.FC<HeadersEditorProps> = ({ headers, onChange 
       ) : (
         <div className="space-y-2">
           {headers.map((header, index) => (
-            <div key={index} className="flex items-center gap-2">
+            <div key={index} className="grid grid-cols-3 gap-4 items-center">
               <HeaderKeyInput
                 value={header.key}
                 onChange={(val) => updateHeader(index, 'key', val)}
                 suggestions={COMMON_HEADER_KEYS}
                 placeholder="Header name (e.g., Authorization)"
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                containerClassName="flex-1"
+                containerClassName="w-full"
               />
-              <input
-                type="text"
+              <VariableAwareInput
                 value={header.value}
-                onChange={(e) => updateHeader(index, 'value', e.target.value)}
+                onChange={(e) => updateHeader(index, 'value', (e.target as HTMLInputElement).value)}
                 placeholder="Header value (supports {{variables}})"
-                className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                containerClassName="w-full"
+                variables={variables || {}}
               />
-              <button
-                onClick={() => removeHeader(index)}
-                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                title="Remove header"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => removeHeader(index)}
+                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                  title="Remove header"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           ))}
           {/* Combobox handles suggestions; datalist removed intentionally */}
@@ -113,7 +118,7 @@ export const HeadersEditor: React.FC<HeadersEditorProps> = ({ headers, onChange 
       )}
 
       <div className="text-xs text-gray-500">
-        <p>• Use {'{variable}'} syntax to reference environment or collection variables</p>
+        <p>• Use {'{{variable}}'} syntax to reference environment or collection variables</p>
         <p>• Content-Type and Accept headers will be set automatically for protobuf requests</p>
       </div>
     </div>

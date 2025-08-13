@@ -64,12 +64,17 @@ func MergeVariables(vars ...map[string]string) map[string]string {
 
 // ExtractVariables finds all {{var}} placeholders in a string
 func ExtractVariables(s string) []string {
-	matches := varRegex.FindAllStringSubmatch(s, -1)
-	result := make([]string, 0, len(matches))
+	// First, find all potential variable patterns, including malformed ones
+	// This regex matches {{var} and {{var}} patterns
+	allMatches := regexp.MustCompile(`\{\{([^}]*)\}?`).FindAllStringSubmatch(s, -1)
+	result := make([]string, 0, len(allMatches))
 	
-	for _, match := range matches {
+	for _, match := range allMatches {
 		if len(match) > 1 {
-			result = append(result, match[1])
+			varName := strings.TrimSpace(match[1])
+			if varName != "" {
+				result = append(result, varName)
+			}
 		}
 	}
 	

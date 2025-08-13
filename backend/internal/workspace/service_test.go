@@ -2,13 +2,24 @@ package workspace
 
 import (
 	"testing"
+	"github.com/datahopper/backend/internal/types"
 )
+
+// NotFoundError represents an error when an entity is not found
+type NotFoundError struct {
+	Entity string
+	ID     string
+}
+
+func (e *NotFoundError) Error() string {
+	return e.Entity + " not found: " + e.ID
+}
 
 func TestWorkspaceService(t *testing.T) {
 	// Create a mock store for testing
 	mockStore := &mockStore{
-		collections: make(map[string]*Collection),
-		environments: map[string]*Environment{
+		collections: make(map[string]*types.Collection),
+		environments: map[string]*types.Environment{
 			"local": {
 				Name: "local",
 				Variables: map[string]string{
@@ -18,16 +29,16 @@ func TestWorkspaceService(t *testing.T) {
 		},
 	}
 
-	service := NewWorkspaceService(mockStore)
+	service := NewService(mockStore)
 
 	t.Run("CreateCollection", func(t *testing.T) {
-		req := CreateCollectionRequest{
+		req := types.CreateCollectionRequest{
 			Name:        "Test Collection",
 			Description: "A test collection",
 			ProtoRoots:  []string{"/path/to/protos"},
 		}
 
-		collection, err := service.CreateCollection(req)
+		collection, err := service.CreateCollection(&req)
 		if err != nil {
 			t.Errorf("Failed to create collection: %v", err)
 		}
@@ -51,12 +62,11 @@ func TestWorkspaceService(t *testing.T) {
 
 	t.Run("CreateRequest", func(t *testing.T) {
 		// First create a collection
-		collection, _ := service.CreateCollection(CreateCollectionRequest{
+		collection, _ := service.CreateCollection(&types.CreateCollectionRequest{
 			Name: "Test Collection for Request",
 		})
 
-		req := CreateRequestRequest{
-			CollectionId: collection.ID,
+		req := types.CreateRequestRequest{
 			Name:         "Test Request",
 			Method:       "POST",
 			URL:          "{{base_url}}/api/test",
@@ -65,7 +75,7 @@ func TestWorkspaceService(t *testing.T) {
 			TimeoutSeconds: 30,
 		}
 
-		request, err := service.CreateRequest(req)
+		request, err := service.CreateRequest(collection.ID, &req)
 		if err != nil {
 			t.Errorf("Failed to create request: %v", err)
 		}
@@ -96,7 +106,7 @@ func TestWorkspaceService(t *testing.T) {
 	})
 
 	t.Run("GetCollection", func(t *testing.T) {
-		collection, _ := service.CreateCollection(CreateCollectionRequest{
+		collection, _ := service.CreateCollection(&types.CreateCollectionRequest{
 			Name: "Test Collection for Get",
 		})
 
@@ -115,12 +125,11 @@ func TestWorkspaceService(t *testing.T) {
 	})
 
 	t.Run("GetRequest", func(t *testing.T) {
-		collection, _ := service.CreateCollection(CreateCollectionRequest{
+		collection, _ := service.CreateCollection(&types.CreateCollectionRequest{
 			Name: "Test Collection for Get Request",
 		})
 
-		request, _ := service.CreateRequest(CreateRequestRequest{
-			CollectionId: collection.ID,
+		request, _ := service.CreateRequest(collection.ID, &types.CreateRequestRequest{
 			Name:         "Test Request for Get",
 			Method:       "GET",
 			URL:          "/api/test",
@@ -141,31 +150,26 @@ func TestWorkspaceService(t *testing.T) {
 	})
 
 	t.Run("UpdateRequest", func(t *testing.T) {
-		collection, _ := service.CreateCollection(CreateCollectionRequest{
+		collection, _ := service.CreateCollection(&types.CreateCollectionRequest{
 			Name: "Test Collection for Update",
 		})
 
-		request, _ := service.CreateRequest(CreateRequestRequest{
-			CollectionId: collection.ID,
+		request, _ := service.CreateRequest(collection.ID, &types.CreateRequestRequest{
 			Name:         "Test Request for Update",
 			Method:       "GET",
 			URL:          "/api/test",
 		})
 
-		updateReq := UpdateRequestRequest{
-			CollectionId: collection.ID,
-			RequestId:    request.ID,
-			Data: Request{
-				Name:         "Updated Request",
-				Method:       "POST",
-				URL:          "/api/updated",
-				ProtoMessage: "user.v1.UpdateUserRequest",
-				ResponseType: "user.v1.UpdateUserResponse",
-				TimeoutSeconds: 60,
-			},
+		updateReq := types.UpdateRequestRequest{
+			Name:         "Updated Request",
+			Method:       "POST",
+			URL:          "/api/updated",
+			ProtoMessage: "user.v1.UpdateUserRequest",
+			ResponseType: "user.v1.UpdateUserResponse",
+			TimeoutSeconds: 60,
 		}
 
-		updated, err := service.UpdateRequest(updateReq)
+		updated, err := service.UpdateRequest(collection.ID, &updateReq, request.ID)
 		if err != nil {
 			t.Errorf("Failed to update request: %v", err)
 		}
@@ -197,9 +201,9 @@ func TestWorkspaceService(t *testing.T) {
 
 	t.Run("ListCollections", func(t *testing.T) {
 		// Create a few collections
-		service.CreateCollection(CreateCollectionRequest{Name: "Collection 1"})
-		service.CreateCollection(CreateCollectionRequest{Name: "Collection 2"})
-		service.CreateCollection(CreateCollectionRequest{Name: "Collection 3"})
+		service.CreateCollection(&types.CreateCollectionRequest{Name: "Collection 1"})
+		service.CreateCollection(&types.CreateCollectionRequest{Name: "Collection 2"})
+		service.CreateCollection(&types.CreateCollectionRequest{Name: "Collection 3"})
 
 		collections, err := service.ListCollections()
 		if err != nil {
@@ -251,7 +255,7 @@ func TestWorkspaceService(t *testing.T) {
 	})
 
 	t.Run("DeleteCollection", func(t *testing.T) {
-		collection, _ := service.CreateCollection(CreateCollectionRequest{
+		collection, _ := service.CreateCollection(&types.CreateCollectionRequest{
 			Name: "Test Collection for Delete",
 		})
 
@@ -268,12 +272,11 @@ func TestWorkspaceService(t *testing.T) {
 	})
 
 	t.Run("DeleteRequest", func(t *testing.T) {
-		collection, _ := service.CreateCollection(CreateCollectionRequest{
+		collection, _ := service.CreateCollection(&types.CreateCollectionRequest{
 			Name: "Test Collection for Delete Request",
 		})
 
-		request, _ := service.CreateRequest(CreateRequestRequest{
-			CollectionId: collection.ID,
+		request, _ := service.CreateRequest(collection.ID, &types.CreateRequestRequest{
 			Name:         "Test Request for Delete",
 			Method:       "GET",
 			URL:          "/api/test",
@@ -294,34 +297,34 @@ func TestWorkspaceService(t *testing.T) {
 
 // Mock store implementation for testing
 type mockStore struct {
-	collections map[string]*Collection
-	environments map[string]*Environment
+	collections map[string]*types.Collection
+	environments map[string]*types.Environment
 	nextID      int
 }
 
-func (m *mockStore) CreateCollection(collection *Collection) error {
+func (m *mockStore) CreateCollection(collection *types.Collection) error {
 	m.nextID++
 	collection.ID = string(rune(m.nextID + 64)) // Simple ID generation
 	m.collections[collection.ID] = collection
 	return nil
 }
 
-func (m *mockStore) GetCollection(id string) (*Collection, error) {
+func (m *mockStore) GetCollection(id string) (*types.Collection, error) {
 	if collection, exists := m.collections[id]; exists {
 		return collection, nil
 	}
 	return nil, &NotFoundError{Entity: "collection", ID: id}
 }
 
-func (m *mockStore) ListCollections() ([]*Collection, error) {
-	collections := make([]*Collection, 0, len(m.collections))
+func (m *mockStore) ListCollections() ([]*types.Collection, error) {
+	collections := make([]*types.Collection, 0, len(m.collections))
 	for _, collection := range m.collections {
 		collections = append(collections, collection)
 	}
 	return collections, nil
 }
 
-func (m *mockStore) UpdateCollection(collection *Collection) error {
+func (m *mockStore) UpdateCollection(collection *types.Collection) error {
 	if _, exists := m.collections[collection.ID]; !exists {
 		return &NotFoundError{Entity: "collection", ID: collection.ID}
 	}
@@ -337,7 +340,7 @@ func (m *mockStore) DeleteCollection(id string) error {
 	return nil
 }
 
-func (m *mockStore) CreateRequest(collectionID string, request *Request) error {
+func (m *mockStore) CreateRequest(collectionID string, request *types.Request) error {
 	collection, exists := m.collections[collectionID]
 	if !exists {
 		return &NotFoundError{Entity: "collection", ID: collectionID}
@@ -349,7 +352,7 @@ func (m *mockStore) CreateRequest(collectionID string, request *Request) error {
 	return nil
 }
 
-func (m *mockStore) GetRequest(collectionID, requestID string) (*Request, error) {
+func (m *mockStore) GetRequest(collectionID, requestID string) (*types.Request, error) {
 	collection, exists := m.collections[collectionID]
 	if !exists {
 		return nil, &NotFoundError{Entity: "collection", ID: collectionID}
@@ -363,7 +366,7 @@ func (m *mockStore) GetRequest(collectionID, requestID string) (*Request, error)
 	return nil, &NotFoundError{Entity: "request", ID: requestID}
 }
 
-func (m *mockStore) UpdateRequest(collectionID string, request *Request) error {
+func (m *mockStore) UpdateRequest(collectionID string, request *types.Request) error {
 	collection, exists := m.collections[collectionID]
 	if !exists {
 		return &NotFoundError{Entity: "collection", ID: collectionID}
@@ -393,17 +396,38 @@ func (m *mockStore) DeleteRequest(collectionID, requestID string) error {
 	return &NotFoundError{Entity: "request", ID: requestID}
 }
 
-func (m *mockStore) ListEnvironments() ([]*Environment, error) {
-	environments := make([]*Environment, 0, len(m.environments))
+func (m *mockStore) ListEnvironments() ([]*types.Environment, error) {
+	environments := make([]*types.Environment, 0, len(m.environments))
 	for _, environment := range m.environments {
 		environments = append(environments, environment)
 	}
 	return environments, nil
 }
 
-func (m *mockStore) GetEnvironment(name string) (*Environment, error) {
+func (m *mockStore) GetEnvironment(name string) (*types.Environment, error) {
 	if environment, exists := m.environments[name]; exists {
 		return environment, nil
 	}
 	return nil, &NotFoundError{Entity: "environment", ID: name}
+}
+
+func (m *mockStore) CreateEnvironment(env *types.Environment) error {
+	m.environments[env.Name] = env
+	return nil
+}
+
+func (m *mockStore) UpdateEnvironment(env *types.Environment) error {
+	if _, exists := m.environments[env.Name]; !exists {
+		return &NotFoundError{Entity: "environment", ID: env.Name}
+	}
+	m.environments[env.Name] = env
+	return nil
+}
+
+func (m *mockStore) DeleteEnvironment(name string) error {
+	if _, exists := m.environments[name]; !exists {
+		return &NotFoundError{Entity: "environment", ID: name}
+	}
+	delete(m.environments, name)
+	return nil
 }

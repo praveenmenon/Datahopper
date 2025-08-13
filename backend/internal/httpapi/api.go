@@ -79,8 +79,8 @@ func (api *API) SetupRoutes(router *gin.Engine) {
 		// Environments
 		apiGroup.GET("/environments", api.listEnvironments)
 		apiGroup.POST("/environments", api.createEnvironment)
-		apiGroup.PUT("/environments/:id", api.updateEnvironment)
-		apiGroup.DELETE("/environments/:id", api.deleteEnvironment)
+        apiGroup.PUT("/environments/:name", api.updateEnvironment)
+        apiGroup.DELETE("/environments/:name", api.deleteEnvironment)
 
 		// Request execution
 		apiGroup.POST("/run", api.runRequest)
