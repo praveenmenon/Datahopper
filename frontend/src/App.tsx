@@ -9,7 +9,6 @@ function App() {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<string | null>(null);
   const [activeEnvironment, setActiveEnvironment] = useState<string>('');
-  const [responseData, setResponseData] = useState<any>(null);
 
   // Data fetching
   const { data: collections = [], isLoading: collectionsLoading } = useCollections();
@@ -59,8 +58,8 @@ function App() {
     }
   };
 
-  const handleRequestRun = (response: any) => {
-    setResponseData(response);
+  const handleRequestRun = () => {
+    // Response handling can be added here in the future
   };
 
   if (collectionsLoading || environmentsLoading || messageTypesLoading) {

@@ -39,7 +39,7 @@ export const VariableAwareInput: React.FC<Props> = ({ variables = {}, className 
           {allKnown ? (
             <CheckCircle2 className="h-4 w-4 text-green-500" />
           ) : (
-            <AlertTriangle className="h-4 w-4 text-yellow-500" title="Unknown variable" />
+            <AlertTriangle className="h-4 w-4 text-yellow-500" />
           )}
         </div>
       )}
