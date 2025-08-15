@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"context"
 
 	"github.com/datahopper/backend/internal/registry"
 	"github.com/datahopper/backend/internal/runner"
@@ -42,6 +43,7 @@ func NewAPI(registry *registry.Service, workspace *workspace.Service, runner *ru
 
 // SetupRoutes sets up all the API routes
 func (api *API) SetupRoutes(router *gin.Engine) {
+	api.logger.Info().Msg("Setting up API routes")
 	// Add CORS middleware
 	router.Use(api.corsMiddleware())
 
@@ -61,7 +63,9 @@ func (api *API) SetupRoutes(router *gin.Engine) {
 		apiGroup.POST("/protos/register", api.registerProtos)
 		apiGroup.POST("/protos/register/upload", api.registerProtosFromUpload)
 		apiGroup.GET("/registry/messages", api.listMessages)
+		apiGroup.GET("/registry/messages/:fqn/schema", api.getMessageSchema)
 		apiGroup.GET("/registry/messages/:fqn/fields", api.getMessageFields)
+		api.logger.Info().Msg("Registered schema endpoint")
 
 		// Collections
 		apiGroup.GET("/collections", api.listCollections)
@@ -283,6 +287,11 @@ func (api *API) registerProtosFromUpload(c *gin.Context) {
 
 // List available message types
 func (api *API) listMessages(c *gin.Context) {
+	// Ensure registry is loaded from DB if available and empty in-memory state
+	if err := api.ensureRegistryLoaded(); err != nil {
+		api.logger.Error().Err(err).Msg("Failed to ensure registry is loaded")
+	}
+
 	messageTypes, err := api.registry.ListMessageTypes()
 	if err != nil {
 		api.logger.Error().Err(err).Msg("Failed to list message types")
@@ -307,6 +316,10 @@ func (api *API) getMessageFields(c *gin.Context) {
 		return
 	}
 
+	if err := api.ensureRegistryLoaded(); err != nil {
+		api.logger.Error().Err(err).Msg("Failed to ensure registry is loaded")
+	}
+
 	// Build flattened list of fields including nested paths
 	visited := make(map[string]bool)
 	collected := make(map[string]bool)
@@ -323,6 +336,39 @@ func (api *API) getMessageFields(c *gin.Context) {
 	})
 }
 
+// getMessageSchema returns comprehensive schema metadata for a message
+func (api *API) getMessageSchema(c *gin.Context) {
+	fqn := c.Param("fqn")
+	if fqn == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "message FQN is required"})
+		return
+	}
+
+	if err := api.ensureRegistryLoaded(); err != nil {
+		api.logger.Error().Err(err).Msg("Failed to ensure registry is loaded")
+	}
+
+	schema, err := api.registry.GetSchemaService().GetMessageSchema(fqn)
+	if err != nil {
+		api.logger.Error().Err(err).Str("fqn", fqn).Msg("Failed to get message schema")
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("message schema not found: %s", fqn)})
+		return
+	}
+
+	c.JSON(http.StatusOK, schema)
+}
+
+// ensureRegistryLoaded attempts to load registry from DB if the in-memory registry is empty
+func (api *API) ensureRegistryLoaded() error {
+	// Simple heuristic: if ListMessageTypes returns 0, try to LoadFromDatabase
+	types, err := api.registry.ListMessageTypes()
+	if err == nil && len(types) > 0 {
+		return nil
+	}
+	ctx := context.Background()
+	return api.registry.LoadFromDatabase(ctx, "default")
+}
+
 // flattenMessageFields recursively flattens fields of a message into dot-paths using registry immediate fields
 func (api *API) flattenMessageFields(fqn string, prefix string, visited map[string]bool, depth int, collected map[string]bool) ([]gin.H, error) {
 	// Guard against deep or cyclic graphs
@@ -335,8 +381,21 @@ func (api *API) flattenMessageFields(fqn string, prefix string, visited map[stri
 	}
 	visited[key] = true
 
-	immediate, err := api.registry.GetMessageFields(fqn)
+	api.logger.Debug().
+		Str("method", "flattenMessageFields").
+		Str("fqn", fqn).
+		Int("depth", depth).
+		Msg("Calling GetComprehensiveMessageFields")
+
+	// Use GetComprehensiveMessageFields to get all nested fields with oneof information
+	comprehensive, err := api.registry.GetComprehensiveMessageFields(fqn)
 	if err != nil {
+		api.logger.Debug().
+			Str("method", "flattenMessageFields").
+			Str("fqn", fqn).
+			Str("error", err.Error()).
+			Msg("GetComprehensiveMessageFields failed")
+		
 		// Only bubble up for the root; for nested, treat as leaf
 		if depth == 0 {
 			return nil, fmt.Errorf("message not found: %s", fqn)
@@ -344,11 +403,20 @@ func (api *API) flattenMessageFields(fqn string, prefix string, visited map[stri
 		return []gin.H{}, nil
 	}
 
+	api.logger.Debug().
+		Str("method", "flattenMessageFields").
+		Str("fqn", fqn).
+		Int("fieldCount", len(comprehensive)).
+		Msg("GetComprehensiveMessageFields succeeded")
+
 	var out []gin.H
-	for _, raw := range immediate {
+	for _, raw := range comprehensive {
 		name, _ := raw["name"].(string)
+		// Prefer fully-computed path from registry if present to avoid duplication
 		path := name
-		if prefix != "" {
+		if rp, ok := raw["path"].(string); ok && rp != "" {
+			path = rp
+		} else if prefix != "" {
 			path = prefix + "." + name
 		}
 		typ, _ := raw["type"].(string)
@@ -357,16 +425,7 @@ func (api *API) flattenMessageFields(fqn string, prefix string, visited map[stri
 		isMsg, _ := raw["message"].(bool)
 		msgType, _ := raw["messageType"].(string)
 
-		// Recurse into messages; do not emit a separate container entry to avoid duplicates
-		if isMsg && msgType != "" && !strings.HasPrefix(msgType, "google.") {
-			nested, nerr := api.flattenMessageFields(msgType, path, visited, depth+1, collected)
-			if nerr == nil {
-				out = append(out, nested...)
-			}
-			continue
-		}
-
-		// Deduplicate by full path
+		// Deduplicate by full path for all entries to avoid repeats rendered in the UI
 		if collected[path] {
 			continue
 		}
@@ -397,7 +456,16 @@ func (api *API) flattenMessageFields(fqn string, prefix string, visited map[stri
 				entry["enumValues"] = vals
 			}
 		}
+		// Add oneof information
+		if oneofFlag, ok := raw["oneof"].(bool); ok && oneofFlag {
+			entry["oneof"] = true
+			if oneofName, ok := raw["oneofName"].(string); ok {
+				entry["oneofName"] = oneofName
+			}
+		}
 		out = append(out, entry)
+
+		// Do not recurse here: GetComprehensiveMessageFields already returned nested entries with full paths
 	}
 	return out, nil
 }
@@ -596,6 +664,11 @@ func (api *API) runRequest(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Ensure registry loaded before running
+	if err := api.ensureRegistryLoaded(); err != nil {
+		api.logger.Error().Err(err).Msg("Failed to ensure registry is loaded before run")
 	}
 
 	// Execute request

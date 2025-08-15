@@ -159,6 +159,24 @@ func (s *Service) encodeProtobufBody(messageType string, body interface{}, origi
 	// Clean up the body to handle potential oneof conflicts using the descriptor and original field order
 	cleanedBody := s.cleanBodyForProtobufWithDescriptor(msgDesc, body, originalFields)
 
+	// Debug: Log the cleaned body structure before JSON marshaling
+	if bodyMap, ok := cleanedBody.(map[string]interface{}); ok {
+		// Check the last4 field specifically
+		if details, ok := bodyMap["paymentMethod"].(map[string]interface{}); ok {
+			if cc, ok := details["details"].(map[string]interface{}); ok {
+				if ccDetails, ok := cc["cc"].(map[string]interface{}); ok {
+					if last4, exists := ccDetails["last4"]; exists {
+						s.logger.Debug().
+							Str("field", "last4").
+							Interface("value", last4).
+							Str("type", fmt.Sprintf("%T", last4)).
+							Msg("last4 field before JSON marshaling")
+					}
+				}
+			}
+		}
+	}
+
 	// Create dynamic message
 	dynamicMsg := dynamicpb.NewMessage(msgDesc)
 
@@ -167,6 +185,11 @@ func (s *Service) encodeProtobufBody(messageType string, body interface{}, origi
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal body to JSON: %w", err)
 	}
+
+	// Debug: Log the JSON string to see what was actually marshaled
+	s.logger.Debug().
+		Str("jsonString", string(jsonBytes)).
+		Msg("JSON string after marshaling")
 
 	// Unmarshal JSON into dynamic message with more permissive options
 	unmarshalOpts := protojson.UnmarshalOptions{

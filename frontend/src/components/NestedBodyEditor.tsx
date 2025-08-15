@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { BodyField, MessageField } from '../lib/types';
+import { BodyField, MessageField, MessageSchemaMeta, OneofGroupMeta } from '../lib/types';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface NestedBodyEditorProps {
   fields: MessageField[];
   values: BodyField[];
   onChange: (body: BodyField[]) => void;
+  schema?: MessageSchemaMeta;
 }
 
 interface TreeNode {
@@ -158,7 +159,8 @@ const NodeRenderer: React.FC<{
   body: BodyField[];
   onBodyChange: (next: BodyField[]) => void;
   level?: number;
-}> = ({ node, valueMap, body, onBodyChange, level = 0 }) => {
+  schema?: MessageSchemaMeta;
+}> = ({ node, valueMap, body, onBodyChange, level = 0, schema }) => {
   // Leaf node
   if (node.field && (!node.children || Object.keys(node.children!).length === 0)) {
     const v = valueMap[node.fullPath] ?? '';
@@ -179,6 +181,168 @@ const NodeRenderer: React.FC<{
   // Group node
   const [open, setOpen] = useState(true);
   const entries = Object.entries(node.children || {});
+  
+  // Oneof detection from backend schema with optional enum controller sibling
+  const detectOneofGroup = () => {
+    if (!(schema && Array.isArray(schema.oneofs) && schema.oneofs.length > 0)) return null;
+    const childKeys = new Set(entries.map(([k]) => k));
+    const groupsInNode: { group: OneofGroupMeta; memberKeys: string[] }[] = [];
+    for (const group of schema.oneofs) {
+      const memberKeys = group.fields.filter(f => childKeys.has(f));
+      if (memberKeys.length >= 2) groupsInNode.push({ group, memberKeys });
+    }
+    if (groupsInNode.length === 0) return null;
+    const chosen = groupsInNode[0];
+    // Prefer explicit enum controller sibling if present
+    const enumSiblings = entries.filter(([, ch]) => ch.field && (ch.field as any).enum);
+    const controllerTuple = enumSiblings.find(([key]) => !chosen.memberKeys.includes(key));
+    let controllerKey: string | undefined;
+    let controllerPath: string | undefined;
+    let controllerValue: string | undefined;
+    if (controllerTuple) {
+      controllerKey = controllerTuple[0];
+      controllerPath = (controllerTuple[1] as any).fullPath;
+      if (controllerPath) controllerValue = valueMap[controllerPath] as string | undefined;
+    }
+    // If no controller, derive active by presence
+    let active: string | undefined = controllerValue;
+    if (!controllerKey) {
+      active = chosen.memberKeys.find(member => {
+        const prefix = node.fullPath ? `${node.fullPath}.${member}.` : `${member}.`;
+        return Object.keys(valueMap).some(p => p.startsWith(prefix));
+      });
+    }
+    return {
+      controllerKey,
+      controllerPath,
+      controllerValue: active,
+      oneofOptions: chosen.memberKeys,
+      oneofGroupName: chosen.group.name,
+      messageFields: entries.filter(([k]) => chosen.memberKeys.includes(k)).map(([key, node]) => ({ key, node })),
+    } as any;
+  };
+  
+  // Fallback: infer oneof groups from field metadata when schema is missing
+  const detectOneofGroupFallback = () => {
+    // Build map childKey -> set(oneofName) from descendants' leaf fields
+    const childToOneofNames: Record<string, Set<string>> = {};
+    const collectOneofNames = (node: TreeNode, acc: Set<string>) => {
+      if (node.field && (node.field as any).oneof && node.field.oneofName) {
+        acc.add(node.field.oneofName as string);
+      }
+      if (node.children) {
+        Object.values(node.children).forEach(ch => collectOneofNames(ch, acc));
+      }
+    };
+    for (const [key, child] of entries) {
+      const s = new Set<string>();
+      collectOneofNames(child, s);
+      if (s.size > 0) childToOneofNames[key] = s;
+    }
+    if (Object.keys(childToOneofNames).length === 0) return null;
+    // Group children by shared oneofName
+    const nameToMembers: Record<string, string[]> = {};
+    for (const [key, names] of Object.entries(childToOneofNames)) {
+      names.forEach(n => {
+        if (!nameToMembers[n]) nameToMembers[n] = [];
+        nameToMembers[n].push(key);
+      });
+    }
+    // Find any oneofName that has >= 2 members among this node's direct children
+    const [groupName, members] = Object.entries(nameToMembers).find(([, members]) => members.length >= 2) || [] as any;
+    if (!groupName || !members) return null;
+    // Try to identify an enum controller sibling (not part of members)
+    const enumSiblings = entries.filter(([, ch]) => ch.field && (ch.field as any).enum);
+    const controllerTuple = enumSiblings.find(([key]) => !(members as string[]).includes(key));
+    let controllerKey: string | undefined;
+    let controllerPath: string | undefined;
+    let controllerValue: string | undefined;
+    if (controllerTuple) {
+      controllerKey = controllerTuple[0];
+      controllerPath = (controllerTuple[1] as any).fullPath;
+      controllerValue = controllerPath ? valueMap[controllerPath] : undefined;
+    }
+    // If no controller found, infer active by presence
+    let active = controllerValue as string | undefined;
+    if (!controllerKey) {
+      active = (members as string[]).find(member => {
+        const prefix = node.fullPath ? `${node.fullPath}.${member}.` : `${member}.`;
+        return Object.keys(valueMap).some(p => p.startsWith(prefix));
+      });
+    }
+    return {
+      controllerKey,
+      controllerPath,
+      controllerValue: active,
+      oneofOptions: members as string[],
+      oneofGroupName: groupName as string,
+      messageFields: entries.filter(([k]) => (members as string[]).includes(k)).map(([key, node]) => ({ key, node })),
+    } as any;
+  };
+  
+  const oneofInfo = detectOneofGroup() || detectOneofGroupFallback();
+  let visibleEntries = entries;
+  
+  if (oneofInfo) {
+    const { controllerKey, controllerValue, oneofOptions } = oneofInfo;
+    
+    // Check if controller has a meaningful value (not undefined or default enum values)
+    const hasValidControllerValue = !!controllerValue &&
+      String(controllerValue).toLowerCase() !== 'undefined' &&
+      !String(controllerValue).toLowerCase().startsWith('undefined_') &&
+      String(controllerValue).trim() !== '';
+    
+    if (controllerKey && hasValidControllerValue) {
+      // Show the controller and the matching oneof option
+      visibleEntries = entries.filter(([key]) => {
+        // If we had a controller field, always show it
+        if (controllerKey && key === controllerKey) return true;
+        
+        // Show non-oneof fields (not in the oneofOptions list)
+        if (oneofOptions && !oneofOptions.includes(key)) return true;
+        
+        // For oneof fields, only show the one that matches the controller value
+        const keyLower = key.toLowerCase();
+        const valueLower = String(controllerValue).toLowerCase();
+        
+        // Direct match
+        if (keyLower === valueLower) return true;
+        
+        // Handle common protobuf naming patterns:
+        // 1. Remove common suffixes (Type, Details, etc.)
+        const keyBase = keyLower.replace(/(type|details|identity)$/, '');
+        const valueBase = valueLower.replace(/(type|details|identity)$/, '');
+        if (keyBase === valueBase) return true;
+        
+        // 2. Handle abbreviations (CreditCard -> cc)
+        if (keyLower === 'cc' && valueBase === 'creditcard') return true;
+        if (keyLower === 'ach' && valueBase === 'ach') return true;
+        
+        // 3. Handle underscored versions
+        if (keyLower.replace(/[_-]/g, '') === valueLower.replace(/[_-]/g, '')) return true;
+        
+        // 4. Handle partial matches where one contains the other
+        if (valueLower.includes(keyLower) || keyLower.includes(valueLower)) return true;
+        
+        return false;
+      });
+    } else if (controllerKey && !hasValidControllerValue) {
+      // Explicit controller exists but is unset → hide all members but still show non-oneof siblings
+      visibleEntries = entries.filter(([key]) => {
+        if (key === controllerKey) return true;
+        if (!oneofOptions) return true;
+        return !oneofOptions.includes(key);
+      });
+    } else {
+      // No controller sibling; use presence-only active selection
+      visibleEntries = entries.filter(([key]) => {
+        if (oneofOptions && !oneofOptions.includes(key)) return true;
+        const keyPrefix = node.fullPath ? `${node.fullPath}.${key}.` : `${key}.`;
+        return Object.keys(valueMap).some(p => p.startsWith(keyPrefix));
+      });
+    }
+  }
+  
   return (
     <div className="rounded-md" style={{ marginLeft: level * 12 }}>
       <button
@@ -188,10 +352,15 @@ const NodeRenderer: React.FC<{
       >
         {open ? <ChevronDown className="h-4 w-4 mr-1 text-gray-500" /> : <ChevronRight className="h-4 w-4 mr-1 text-gray-500" />}
         <span className="text-sm font-medium text-gray-900">{node.name}</span>
+        {oneofInfo && (
+          <span className="ml-2 text-xs text-gray-500">
+            (oneof - {oneofInfo.controllerValue || `select ${oneofInfo.controllerKey}`})
+          </span>
+        )}
       </button>
       {open && (
         <div className="pl-3">
-          {entries.map(([, child]) => (
+          {visibleEntries.map(([, child]) => (
             <NodeRenderer
               key={child.fullPath}
               node={child}
@@ -199,15 +368,28 @@ const NodeRenderer: React.FC<{
               body={body}
               onBodyChange={onBodyChange}
               level={(level || 0) + 1}
+              schema={schema}
             />
           ))}
+          {oneofInfo && !oneofInfo.controllerValue && (
+            <div className="text-xs text-gray-500 italic py-1">
+              Select a {oneofInfo.controllerKey} above to see available fields
+            </div>
+          )}
+          {oneofInfo && oneofInfo.controllerValue && visibleEntries.filter(([key]) => 
+            oneofInfo.messageFields.some((mf: { key: string }) => mf.key === key)
+          ).length === 0 && (
+            <div className="text-xs text-gray-500 italic py-1">
+              No fields available for {oneofInfo.controllerValue}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 };
 
-export const NestedBodyEditor: React.FC<NestedBodyEditorProps> = ({ fields, values, onChange }) => {
+export const NestedBodyEditor: React.FC<NestedBodyEditorProps> = ({ fields, values, onChange, schema }) => {
   const tree = useMemo(() => buildTree(fields), [fields]);
   const valueMap = useMemo(() => getValueMap(values), [values]);
 
@@ -230,6 +412,7 @@ export const NestedBodyEditor: React.FC<NestedBodyEditorProps> = ({ fields, valu
               valueMap={valueMap}
               body={values}
               onBodyChange={onChange}
+              schema={schema}
             />
           ))}
         </div>

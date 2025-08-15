@@ -1,6 +1,21 @@
-version: '3.8'
-
 services:
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: datahopper
+      POSTGRES_PASSWORD: datahopper
+      POSTGRES_DB: datahopper
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -8,12 +23,22 @@ services:
     ports:
       - "8088:8088"
     environment:
-      - GIN_MODE=release
+      GIN_MODE: release
+      DB_DSN: postgres://datahopper:datahopper@db:5432/datahopper?sslmode=disable
     volumes:
       - ./backend:/app
       - /app/bin
     working_dir: /app
-    command: go run ./cmd/api/main.go
+    # Wait until db is healthy before starting
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'DB is healthy, starting API...' &&
+        go run ./cmd/api/main.go
+      "
+    restart: unless-stopped
 
   frontend:
     build:
@@ -22,11 +47,16 @@ services:
     ports:
       - "5173:5173"
     environment:
-      - VITE_API_BASE=http://localhost:8088
+      # From the user's browser, localhost:8088 is correct (backend is published on the host)
+      VITE_API_BASE: http://localhost:8088
     volumes:
       - ./frontend:/app
       - /app/node_modules
     working_dir: /app
-    command: npm run dev -- --host 0.0.0.0
     depends_on:
       - backend
+    command: npm run dev -- --host 0.0.0.0
+    restart: unless-stopped
+
+volumes:
+  db_data:

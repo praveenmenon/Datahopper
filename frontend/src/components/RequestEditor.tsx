@@ -9,6 +9,7 @@ import { ResponsePanel } from './ResponsePanel';
 import { VariablesPreview } from './VariablesPreview';
 import { useRunRequest, useUpdateRequest } from '../lib/useData';
 import { protoApi } from '../lib/api';
+import { MessageSchemaMeta } from '../lib/types';
 
 interface RequestEditorProps {
   collection: Collection | null;
@@ -38,6 +39,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messageFields, setMessageFields] = useState<MessageField[]>([]);
+  const [schema, setSchema] = useState<MessageSchemaMeta | null>(null);
 
   const runRequest = useRunRequest();
   const updateRequest = useUpdateRequest();
@@ -65,16 +67,25 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   // Load message fields when proto message changes
   useEffect(() => {
     if (protoMessage) {
-      protoApi.getMessageFields(protoMessage)
-        .then(response => {
+      // Try advanced schema first; if unavailable, fall back to fields
+      (async () => {
+        try {
+          const s = await protoApi.getMessageSchema(protoMessage);
+          setSchema(s);
+        } catch (e) {
+          setSchema(null);
+        }
+        try {
+          const response = await protoApi.getMessageFields(protoMessage);
           setMessageFields(response.fields);
-        })
-        .catch(err => {
+        } catch (err) {
           console.error('Failed to load message fields:', err);
           setMessageFields([]);
-        });
+        }
+      })();
     } else {
       setMessageFields([]);
+      setSchema(null);
     }
   }, [protoMessage]);
 
@@ -84,8 +95,27 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     if (body && body.length > 0) return; // don't overwrite user content
     if (!messageFields || messageFields.length === 0) return;
 
+    // Build set of oneof member prefixes (like paymentMethod.details.cc)
+    const oneofPrefixes = new Set<string>();
+    messageFields.forEach((f) => {
+      if ((f as any).oneof && f.message && (f.path || f.name)) {
+        const p = (f.path || f.name)!;
+        oneofPrefixes.add(p);
+      }
+    });
+
     const generatedFields: BodyField[] = messageFields
       .filter(f => !isTimestamp(f))
+      // Do not pre-generate any oneof member fields. They become visible only when selected.
+      .filter(f => {
+        if ((f as any).oneof) return false; // direct member
+        const p = (f.path || f.name) || '';
+        // Skip leaves that live under any oneof member prefix
+        for (const pref of oneofPrefixes) {
+          if (p.startsWith(pref + '.')) return false;
+        }
+        return true;
+      })
       .map(field => ({
         path: field.path || field.name,
         value: getDefaultValueForField(field)
@@ -98,8 +128,25 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     if (!fields || fields.length === 0) return;
     const overwrite = body.length === 0 || window.confirm('Replace current body with fields from the selected proto?');
     if (!overwrite) return;
+    const oneofPrefixes2 = new Set<string>();
+    fields.forEach((f) => {
+      if ((f as any).oneof && f.message && (f.path || f.name)) {
+        const p = (f.path || f.name)!;
+        oneofPrefixes2.add(p);
+      }
+    });
+
     const generated: BodyField[] = fields
       .filter(f => !isTimestamp(f))
+      // Exclude oneof members from bulk generation
+      .filter(f => {
+        if ((f as any).oneof) return false;
+        const p = (f.path || f.name) || '';
+        for (const pref of oneofPrefixes2) {
+          if (p.startsWith(pref + '.')) return false;
+        }
+        return true;
+      })
       .map(f => ({
         path: f.path || f.name,
         value: getDefaultValueForField(f),
@@ -329,7 +376,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           {/* Protobuf Configuration */}
           <div className="border-b border-gray-200 p-4">
             <h3 className="text-sm font-medium text-gray-900 mb-3">Protobuf Configuration</h3>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Request Message Type
@@ -394,6 +441,9 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
                   fields={messageFields}
                   values={body}
                   onChange={setBody}
+                  // Pass schema for oneof and cardinality awareness
+                  // @ts-ignore - component currently accepts props defined below
+                  schema={schema || undefined}
                 />
               ) : (
                 <BodyEditor

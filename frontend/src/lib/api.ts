@@ -9,7 +9,8 @@ import {
   RunRequest, 
   RunResponse,
   ProtoRegisterRequest,
-  MessageFieldsResponse 
+  MessageFieldsResponse,
+  MessageSchemaMeta 
 } from './types';
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8088';
@@ -79,6 +80,10 @@ export const protoApi = {
     
   getMessageFields: (fqn: string): Promise<MessageFieldsResponse> =>
     apiRequest(`/api/registry/messages/${encodeURIComponent(fqn)}/fields`),
+
+  // Optional advanced schema endpoint (backend may or may not expose it)
+  getMessageSchema: async (fqn: string): Promise<MessageSchemaMeta> =>
+    apiRequest(`/api/registry/messages/${encodeURIComponent(fqn)}/schema`),
 };
 
 // Collections API
