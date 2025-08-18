@@ -298,8 +298,7 @@ func coerceValue(val interface{}) interface{} {
         return s
     }
 
-    // Only coerce JSON literals (bool/null), NOT numbers
-    // This prevents strings like "4444" from being converted to numbers
+    // Only coerce JSON literals (bool/null/number)
     if str == "true" {
         return true
     }
@@ -310,8 +309,17 @@ func coerceValue(val interface{}) interface{} {
         return nil
     }
 
+    // Attempt to parse as a JSON number (e.g., 30, 1.25, 1e3)
+    // json.Unmarshal will convert JSON numbers to float64
+    var num interface{}
+    if err := json.Unmarshal([]byte(str), &num); err == nil {
+        switch num.(type) {
+        case float64:
+            return num
+        }
+    }
+
     // Return the original string for everything else
-    // This includes numbers like "4444", which should remain as strings
     return s
 }
 
