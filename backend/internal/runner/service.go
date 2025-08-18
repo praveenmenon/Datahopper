@@ -180,6 +180,14 @@ func (s *Service) encodeProtobufBody(messageType string, body interface{}, origi
 	// Create dynamic message
 	dynamicMsg := dynamicpb.NewMessage(msgDesc)
 
+	// Transform well-known types (e.g., google.protobuf.Timestamp) from UI-friendly
+	// representations into protojson-compatible encodings before JSON marshaling
+	if m, ok := cleanedBody.(map[string]interface{}); ok {
+		s.transformWellKnownTypesForJSON(msgDesc, m)
+		// Additionally coerce value types to expected protobuf kinds (e.g., numbers -> strings)
+		s.coerceJSONTypesToProtoKinds(msgDesc, m)
+	}
+
 	// Convert cleaned body to JSON bytes
 	jsonBytes, err := json.Marshal(cleanedBody)
 	if err != nil {
@@ -262,6 +270,146 @@ func (s *Service) cleanBodyForProtobufWithDescriptor(md protoreflect.MessageDesc
 	}
 	
 	return body
+}
+
+// transformWellKnownTypesForJSON walks the body using the descriptor and converts well-known
+// types into the JSON shapes expected by protojson. Currently handles google.protobuf.Timestamp
+// by turning {seconds, nanos} objects into RFC3339 strings. Operates in-place on m.
+func (s *Service) transformWellKnownTypesForJSON(md protoreflect.MessageDescriptor, m map[string]interface{}) {
+	for i := 0; i < md.Fields().Len(); i++ {
+		fd := md.Fields().Get(i)
+		jsonName := fd.JSONName()
+		val, exists := m[jsonName]
+		if !exists {
+			continue
+		}
+
+		if fd.Kind() == protoreflect.MessageKind {
+			childMd := fd.Message()
+			fullName := string(childMd.FullName())
+
+			// Handle google.protobuf.Timestamp
+			if fullName == "google.protobuf.Timestamp" {
+				switch vv := val.(type) {
+				case map[string]interface{}:
+					seconds := extractInt64(vv["seconds"]) // default 0 if missing
+					nanos := extractInt64(vv["nanos"])     // default 0 if missing
+					if nanos < 0 {
+						nanos = 0
+					}
+					if nanos > 999999999 {
+						nanos = 999999999
+					}
+					m[jsonName] = time.Unix(seconds, nanos).UTC().Format(time.RFC3339Nano)
+				case []interface{}:
+					for idx, item := range vv {
+						if itemMap, ok := item.(map[string]interface{}); ok {
+							seconds := extractInt64(itemMap["seconds"]) // default 0 if missing
+							nanos := extractInt64(itemMap["nanos"])     // default 0 if missing
+							if nanos < 0 {
+								nanos = 0
+							}
+							if nanos > 999999999 {
+								nanos = 999999999
+							}
+							vv[idx] = time.Unix(seconds, nanos).UTC().Format(time.RFC3339Nano)
+						}
+					}
+					m[jsonName] = vv
+				default:
+					// Already a string or other type; leave as-is
+				}
+				continue
+			}
+
+			// Recurse into nested message fields
+			switch typed := val.(type) {
+			case map[string]interface{}:
+				s.transformWellKnownTypesForJSON(childMd, typed)
+			case []interface{}:
+				for idx, item := range typed {
+					if itemMap, ok := item.(map[string]interface{}); ok {
+						s.transformWellKnownTypesForJSON(childMd, itemMap)
+						typed[idx] = itemMap
+					}
+				}
+				m[jsonName] = typed
+			}
+		}
+	}
+}
+
+// coerceJSONTypesToProtoKinds walks the JSON-like map and coerces values to match the
+// protobuf field kinds where safe/obvious. Currently:
+// - For string fields, convert numeric and boolean inputs to their string representation.
+func (s *Service) coerceJSONTypesToProtoKinds(md protoreflect.MessageDescriptor, m map[string]interface{}) {
+    for i := 0; i < md.Fields().Len(); i++ {
+        fd := md.Fields().Get(i)
+        jsonName := fd.JSONName()
+        val, exists := m[jsonName]
+        if !exists {
+            continue
+        }
+
+        switch fd.Kind() {
+        case protoreflect.StringKind:
+            switch v := val.(type) {
+            case []interface{}:
+                // Repeated string: coerce each element
+                for idx, item := range v {
+                    switch iv := item.(type) {
+                    case int, int32, int64, uint, uint32, uint64, float32, float64, bool:
+                        v[idx] = fmt.Sprint(iv)
+                    }
+                }
+                m[jsonName] = v
+            case int, int32, int64, uint, uint32, uint64, float32, float64, bool:
+                m[jsonName] = fmt.Sprint(v)
+            }
+        case protoreflect.MessageKind:
+            childMd := fd.Message()
+            switch typed := val.(type) {
+            case map[string]interface{}:
+                s.coerceJSONTypesToProtoKinds(childMd, typed)
+            case []interface{}:
+                for idx, item := range typed {
+                    if itemMap, ok := item.(map[string]interface{}); ok {
+                        s.coerceJSONTypesToProtoKinds(childMd, itemMap)
+                        typed[idx] = itemMap
+                    }
+                }
+                m[jsonName] = typed
+            }
+        }
+    }
+}
+
+// extractInt64 converts various numeric JSON representations into int64.
+func extractInt64(v interface{}) int64 {
+	switch t := v.(type) {
+	case int:
+		return int64(t)
+	case int32:
+		return int64(t)
+	case int64:
+		return t
+	case float32:
+		return int64(t)
+	case float64:
+		return int64(t)
+	case string:
+		if t == "" {
+			return 0
+		}
+		var n int64
+		_, err := fmt.Sscan(t, &n)
+		if err == nil {
+			return n
+		}
+		return 0
+	default:
+		return 0
+	}
 }
 
 // pruneOneofConflicts removes conflicting oneof members from the given map, keeping the last-set one
