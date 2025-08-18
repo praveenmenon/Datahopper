@@ -130,6 +130,7 @@ The backend supports these environment variables:
 - `PORT`: Server port (default: 8088)
 - `LOG_LEVEL`: Logging level (default: info)
 - `PROTO_CACHE_DIR`: Protobuf cache directory
+- `DB_DSN`: Postgres DSN (e.g., `postgres://datahopper:datahopper@localhost:5432/datahopper?sslmode=disable`)
 
 ### Frontend Configuration
 
@@ -215,6 +216,44 @@ make fmt          # Format Go code
 make lint         # Lint Go code
 make install-deps # Install all dependencies
 ```
+
+## 🗄️ Database (PostgreSQL)
+
+This project persists compiled protobuf descriptor images in PostgreSQL.
+
+- Bring up Postgres locally:
+
+```bash
+docker compose up -d db
+```
+
+- Connection settings (docker):
+  - host: localhost
+  - port: 5432
+  - user: datahopper
+  - password: datahopper
+  - database: datahopper
+
+- Set DSN for backend:
+
+```bash
+export DB_DSN=postgres://datahopper:datahopper@localhost:5432/datahopper?sslmode=disable
+```
+
+### Migrations
+
+Run migrations (from repo root):
+
+```bash
+psql "postgres://datahopper:datahopper@localhost:5432/datahopper?sslmode=disable" -c "CREATE TABLE IF NOT EXISTS registries (\n  id BIGSERIAL PRIMARY KEY,\n  name TEXT NOT NULL UNIQUE,\n  descriptor_bytes BYTEA NOT NULL,\n  descriptor_sha256 TEXT NOT NULL,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\nCREATE INDEX IF NOT EXISTS idx_registries_sha ON registries(descriptor_sha256);"
+```
+
+Alternatively, see `migrations/0001_init.sql` and apply with your preferred tool.
+
+### Behavior
+
+- Upload or register protos: backend compiles to a descriptor set, computes SHA256, upserts into `registries` by `name` (currently `default`).
+- On startup and schema read paths, backend loads the latest descriptor from DB if in-memory is empty. Parsed descriptor registries are cached by SHA.
 
 ## 🤝 Contributing
 

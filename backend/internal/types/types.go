@@ -34,6 +34,8 @@ type Request struct {
 	TimeoutSeconds  int          `json:"timeoutSeconds"`
 	CreatedAt       time.Time    `json:"createdAt"`
 	UpdatedAt       time.Time    `json:"updatedAt"`
+	LastResponse    map[string]any `json:"lastResponse,omitempty"`
+	LastResponseAt  *time.Time      `json:"lastResponseAt,omitempty"`
 }
 
 // Collection represents a group of related requests

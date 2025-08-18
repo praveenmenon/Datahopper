@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Play, Save, Eye } from 'lucide-react';
 import { Collection, Environment, MessageType, BodyField, HeaderKV, MessageField, RunRequest } from '../lib/types';
 import { BodyEditor } from './BodyEditor';
@@ -7,8 +7,10 @@ import { NestedBodyEditor } from './NestedBodyEditor';
 import { HeadersEditor } from './HeadersEditor';
 import { ResponsePanel } from './ResponsePanel';
 import { VariablesPreview } from './VariablesPreview';
-import { useRunRequest, useUpdateRequest } from '../lib/useData';
-import { protoApi } from '../lib/api';
+import { useRunRequest } from '../lib/useData';
+import { protoApi, saveRequest as saveRequestApi } from '../lib/api';
+import { MessageSchemaMeta } from '../lib/types';
+import { useQueryClient } from 'react-query';
 
 interface RequestEditorProps {
   collection: Collection | null;
@@ -25,6 +27,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   messageTypes,
   onRequestRun
 }) => {
+  const [requestName, setRequestName] = useState('Untitled Request');
   const [method, setMethod] = useState('GET');
   const [url, setUrl] = useState('');
   const [protoMessage, setProtoMessage] = useState('');
@@ -38,15 +41,22 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messageFields, setMessageFields] = useState<MessageField[]>([]);
+  const [schema, setSchema] = useState<MessageSchemaMeta | null>(null);
 
   const runRequest = useRunRequest();
-  const updateRequest = useUpdateRequest();
+  const queryClient = useQueryClient();
 
-  // Load request data when selected
+  // Track last seen requestId to avoid unnecessary clears on collection refetches
+  const lastRequestIdRef = useRef<string | null>(null);
+
+  // Load request data when selected; clear only when requestId actually changes to empty
   useEffect(() => {
+    const lastId = lastRequestIdRef.current;
+
     if (collection && requestId) {
       const request = collection.requests.find(r => r.id === requestId);
       if (request) {
+        setRequestName(request.name || 'Untitled Request');
         setMethod(request.method);
         setUrl(request.url);
         setProtoMessage(request.protoMessage || '');
@@ -55,7 +65,55 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         setTimeoutSeconds(request.timeoutSeconds || 30);
         setHeaders(request.headers || []);
         setBody(request.body || []);
+        // Prefer server-stored last response if available, else fallback to localStorage
+        if ((request as any).lastResponse) {
+          setResponse((request as any).lastResponse);
+        } else {
+          try {
+            const cached = localStorage.getItem(`requestResp:${requestId}`);
+            if (cached) {
+              setResponse(JSON.parse(cached));
+            } else {
+              setResponse(null);
+            }
+          } catch {
+            setResponse(null);
+          }
+        }
+        lastRequestIdRef.current = requestId;
+        return;
       }
+    }
+    // New/unsaved request path: clear editor only on transition (when id actually changed)
+    if (collection && !requestId && lastId !== requestId) {
+      setRequestName('Untitled Request');
+      setMethod('GET');
+      setUrl('');
+      setProtoMessage('');
+      setResponseType('');
+      setErrorResponseType('');
+      setTimeoutSeconds(30);
+      setHeaders([]);
+      setBody([]);
+      setMessageFields([]);
+      setSchema(null);
+      setResponse(null);
+      lastRequestIdRef.current = requestId || null;
+    }
+    // Also clear everything if no collection selected
+    if (!collection) {
+      setRequestName('Untitled Request');
+      setMethod('GET');
+      setUrl('');
+      setProtoMessage('');
+      setResponseType('');
+      setErrorResponseType('');
+      setTimeoutSeconds(30);
+      setHeaders([]);
+      setBody([]);
+      setMessageFields([]);
+      setSchema(null);
+      setResponse(null);
     }
   }, [collection, requestId]);
 
@@ -65,16 +123,25 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   // Load message fields when proto message changes
   useEffect(() => {
     if (protoMessage) {
-      protoApi.getMessageFields(protoMessage)
-        .then(response => {
+      // Try advanced schema first; if unavailable, fall back to fields
+      (async () => {
+        try {
+          const s = await protoApi.getMessageSchema(protoMessage);
+          setSchema(s);
+        } catch (e) {
+          setSchema(null);
+        }
+        try {
+          const response = await protoApi.getMessageFields(protoMessage);
           setMessageFields(response.fields);
-        })
-        .catch(err => {
+        } catch (err) {
           console.error('Failed to load message fields:', err);
           setMessageFields([]);
-        });
+        }
+      })();
     } else {
       setMessageFields([]);
+      setSchema(null);
     }
   }, [protoMessage]);
 
@@ -84,8 +151,27 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     if (body && body.length > 0) return; // don't overwrite user content
     if (!messageFields || messageFields.length === 0) return;
 
+    // Build set of oneof member prefixes (like paymentMethod.details.cc)
+    const oneofPrefixes = new Set<string>();
+    messageFields.forEach((f) => {
+      if ((f as any).oneof && f.message && (f.path || f.name)) {
+        const p = (f.path || f.name)!;
+        oneofPrefixes.add(p);
+      }
+    });
+
     const generatedFields: BodyField[] = messageFields
       .filter(f => !isTimestamp(f))
+      // Do not pre-generate any oneof member fields. They become visible only when selected.
+      .filter(f => {
+        if ((f as any).oneof) return false; // direct member
+        const p = (f.path || f.name) || '';
+        // Skip leaves that live under any oneof member prefix
+        for (const pref of oneofPrefixes) {
+          if (p.startsWith(pref + '.')) return false;
+        }
+        return true;
+      })
       .map(field => ({
         path: field.path || field.name,
         value: getDefaultValueForField(field)
@@ -98,8 +184,25 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     if (!fields || fields.length === 0) return;
     const overwrite = body.length === 0 || window.confirm('Replace current body with fields from the selected proto?');
     if (!overwrite) return;
+    const oneofPrefixes2 = new Set<string>();
+    fields.forEach((f) => {
+      if ((f as any).oneof && f.message && (f.path || f.name)) {
+        const p = (f.path || f.name)!;
+        oneofPrefixes2.add(p);
+      }
+    });
+
     const generated: BodyField[] = fields
       .filter(f => !isTimestamp(f))
+      // Exclude oneof members from bulk generation
+      .filter(f => {
+        if ((f as any).oneof) return false;
+        const p = (f.path || f.name) || '';
+        for (const pref of oneofPrefixes2) {
+          if (p.startsWith(pref + '.')) return false;
+        }
+        return true;
+      })
       .map(f => ({
         path: f.path || f.name,
         value: getDefaultValueForField(f),
@@ -211,11 +314,25 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         body,
         timeoutSeconds,
         variables
-      };
+      } as any;
+      // Attach identifiers for backend persistence when available
+      (requestData as any).collectionId = collection?.id || undefined;
+      (requestData as any).requestId = requestId || undefined;
 
-      const response = await runRequest.mutateAsync(requestData);
-      setResponse(response);
-      onRequestRun(response);
+      const resp = await runRequest.mutateAsync(requestData);
+      setResponse(resp);
+      // Cache last response
+      if (requestId) {
+        try { localStorage.setItem(`requestResp:${requestId}`, JSON.stringify(resp)); } catch {}
+      }
+      onRequestRun(resp);
+      // Refresh server state so saved requests include updated lastResponse (only for saved requests)
+      try {
+        if (collection?.id && requestId) {
+          queryClient.invalidateQueries('collections');
+          queryClient.invalidateQueries(['collection', collection.id]);
+        }
+      } catch {}
     } catch (error) {
       console.error('Failed to run request:', error);
       setError(error instanceof Error ? error.message : 'Request failed');
@@ -225,28 +342,49 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   };
 
   const handleSave = async () => {
-    if (!collection || !requestId) return;
+    if (!collection) return;
 
     try {
-      const requestData = {
-        method,
-        url,
-        protoMessage: protoMessage || undefined,
-        responseType: responseType || undefined,
-        errorResponseType: errorResponseType || undefined,
-        headers,
-        body,
-        timeoutSeconds
+      // Convert headers to map for payload
+      const headersMap: Record<string, any> = {};
+      headers.forEach(h => {
+        if (h.key.trim()) headersMap[h.key.trim()] = h.value;
+      });
+
+      const bodyModel: Record<string, any> = {};
+      // Flatten BodyField[] into a simple object; keep as a map of path->value
+      body.forEach(b => {
+        if (b.path) bodyModel[b.path] = b.value;
+      });
+
+      const payload = {
+        collection: collection.id ? { id: collection.id } : { name: collection.name, description: (collection as any).description },
+        request: {
+          id: requestId || undefined,
+          name: requestName || 'Untitled Request',
+          verb: method,
+          url,
+          headers: headersMap,
+          bodyModel,
+          protoMessageFqmn: protoMessage || undefined,
+          responseMessageFqmn: responseType || undefined,
+          errorResponseMessageFqmn: errorResponseType || undefined,
+          timeoutMs: timeoutSeconds * 1000,
+        }
       };
 
-      await updateRequest.mutateAsync({
-        collectionId: collection.id,
-        requestId,
-        data: requestData
-      });
+      const saved = await saveRequestApi(payload as any);
+      // If this was a newly created request and we have a current response, cache it under the new id
+      if (!requestId && saved && (saved as any).request && (saved as any).request.id && response) {
+        try { localStorage.setItem(`requestResp:${(saved as any).request.id}`, JSON.stringify(response)); } catch {}
+      }
+      // Immediately refresh collections so the sidebar shows the saved request
+      queryClient.invalidateQueries('collections');
+      if (collection.id) {
+        queryClient.invalidateQueries(['collection', collection.id]);
+      }
     } catch (error) {
       console.error('Failed to save request:', error);
-      // You could show an error toast here
     }
   };
 
@@ -266,6 +404,15 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
       {/* Request Header */}
       <div className="border-b border-gray-200 p-4">
         <div className="flex items-center space-x-4">
+          {/* Request Name */}
+          <input
+            type="text"
+            value={requestName}
+            onChange={(e) => setRequestName(e.target.value)}
+            placeholder="Request name"
+            className="w-56 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+
           {/* Method Selector */}
           <select
             value={method}
@@ -304,11 +451,11 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           <div className="flex space-x-2">
             <button
               onClick={handleSave}
-              disabled={updateRequest.isLoading || !requestId}
+              disabled={!collection}
               className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors disabled:opacity-50"
             >
               <Save className="h-4 w-4 mr-2" />
-              {updateRequest.isLoading ? 'Saving...' : 'Save'}
+              {'Save'}
             </button>
             <button
               onClick={handleSend}
@@ -329,7 +476,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           {/* Protobuf Configuration */}
           <div className="border-b border-gray-200 p-4">
             <h3 className="text-sm font-medium text-gray-900 mb-3">Protobuf Configuration</h3>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Request Message Type
@@ -394,6 +541,9 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
                   fields={messageFields}
                   values={body}
                   onChange={setBody}
+                  // Pass schema for oneof and cardinality awareness
+                  // @ts-ignore - component currently accepts props defined below
+                  schema={schema || undefined}
                 />
               ) : (
                 <BodyEditor

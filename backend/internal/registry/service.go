@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"context"
+	"crypto/sha256"
 
 	"github.com/jhump/protoreflect/desc"
 	"github.com/rs/zerolog"
@@ -25,15 +27,28 @@ type Service struct {
 	logger       zerolog.Logger
 	protoRoots   []string
 	includePaths []string
+	schema       *SchemaService
+	repo         *Repository
+	parsedCache  map[string]*protoregistry.Files
+	lastSHA      string
 }
 
 // NewService creates a new Protobuf registry service
 func NewService() *Service {
-	return &Service{
+	service := &Service{
 		files:        &protoregistry.Files{},
 		protoRoots:   make([]string, 0),
 		includePaths: make([]string, 0),
+		parsedCache:  make(map[string]*protoregistry.Files),
 	}
+	service.schema = NewSchemaService(service)
+	return service
+}
+
+// WithRepository attaches a persistence repository to the registry service
+func (s *Service) WithRepository(repo *Repository) *Service {
+	s.repo = repo
+	return s
 }
 
 // RegisterRoot registers a root directory or single .proto file
@@ -123,7 +138,28 @@ func (s *Service) registerDirectory(dirPath string) error {
 	}
 
 	// Register files
-	return s.registerDescriptorSet(&descriptorSet)
+	if err := s.registerDescriptorSet(&descriptorSet); err != nil {
+		return err
+	}
+
+	// Persist to database if repository is configured
+	if s.repo != nil {
+		// Compute SHA256 of descriptor bytes
+		sum := sha256.Sum256(output)
+		sha := fmt.Sprintf("%x", sum[:])
+		// Upsert using name "default" for now (no multi-tenant scope yet)
+		ctx := context.Background()
+		if err := s.repo.UpsertRegistry(ctx, "default", output, sha); err != nil {
+			s.logger.Error().Err(err).Msg("failed to upsert registry descriptor")
+		}
+		// Update parsed cache and invalidate prior
+		if s.lastSHA != "" && s.lastSHA != sha {
+			delete(s.parsedCache, s.lastSHA)
+		}
+		s.parsedCache[sha] = s.files
+		s.lastSHA = sha
+	}
+	return nil
 }
 
 // findProtoFilesRecursive finds all .proto files in a directory recursively
@@ -307,20 +343,60 @@ func (r compositeResolver) FindDescriptorByName(name protoreflect.FullName) (pro
 
 // GetMessageFields returns field information for a message by FQN
 func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error) {
+	s.logger.Info().
+		Str("method", "GetMessageFields").
+		Str("fqn", fqn).
+		Msg("GetMessageFields called")
+	
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	// Search through descFiles (protoparse descriptors from virtual filesystem) for immediate fields
+				// Search through descFiles (protoparse descriptors from virtual filesystem) for immediate fields
 	if len(s.descFiles) > 0 {
+		s.logger.Info().
+			Int("descFileCount", len(s.descFiles)).
+			Str("searchingFor", fqn).
+			Msg("Searching for message in descFiles")
+		
 		for _, fd := range s.descFiles {
 			packageName := fd.GetPackage()
 			if packageName == "" {
 				packageName = "default"
 			}
 			messages := fd.GetMessageTypes()
+			s.logger.Info().
+				Str("filePackage", packageName).
+				Int("messageCount", len(messages)).
+				Msg("Processing desc file")
+			
+			// Log all messages in this file for debugging
 			for _, msg := range messages {
 				msgFqn := fmt.Sprintf("%s.%s", packageName, msg.GetName())
+				s.logger.Info().
+					Str("filePackage", packageName).
+					Str("messageName", msg.GetName()).
+					Str("messageFqn", msgFqn).
+					Str("searchingFor", fqn).
+					Bool("matches", msgFqn == fqn).
+					Msg("Checking message in desc file")
+			}
+			
+			for _, msg := range messages {
+				msgFqn := fmt.Sprintf("%s.%s", packageName, msg.GetName())
+				s.logger.Debug().
+					Str("checkingFqn", msgFqn).
+					Str("targetFqn", fqn).
+					Bool("matches", msgFqn == fqn).
+					Msg("Checking message FQN")
+				
 				if msgFqn == fqn {
+					s.logger.Info().
+						Str("fqn", fqn).
+						Str("package", packageName).
+						Str("message", msg.GetName()).
+						Int("fieldCount", len(msg.GetFields())).
+						Msg("Found message in descFiles - using protoparse path")
+					
 					fields := make([]map[string]interface{}, 0)
 					for _, field := range msg.GetFields() {
 						fi := map[string]interface{}{
@@ -343,6 +419,17 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 							}
 							fi["enumValues"] = enumNames
 						}
+						// Add oneof information
+						if oneof := field.GetOneOf(); oneof != nil {
+							s.logger.Info().
+								Str("field", field.GetName()).
+								Str("oneofName", oneof.GetName()).
+								Str("message", msg.GetName()).
+								Str("package", packageName).
+								Msg("Found oneof field via protoparse")
+							fi["oneof"] = true
+							fi["oneofName"] = oneof.GetName()
+						}
 						fields = append(fields, fi)
 					}
 					return fields, nil
@@ -352,12 +439,26 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 	}
 
 	// Fallback to protoregistry approach for immediate fields
+	s.logger.Info().
+		Str("fqn", fqn).
+		Msg("Trying protoregistry fallback")
 	var foundMsg protoreflect.MessageDescriptor
 	s.files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		packageName := string(fd.Package())
 		messages := fd.Messages()
+		s.logger.Info().
+			Str("fqn", fqn).
+			Str("package", packageName).
+			Int("messageCount", messages.Len()).
+			Msg("Checking protoregistry package")
 		for i := 0; i < messages.Len(); i++ {
 			msg := messages.Get(i)
-			fullName := string(fd.Package()) + "." + string(msg.Name())
+			fullName := packageName + "." + string(msg.Name())
+			s.logger.Info().
+				Str("checking", fullName).
+				Str("target", fqn).
+				Bool("matches", fullName == fqn).
+				Msg("Checking protoregistry message")
 			if fullName == fqn {
 				foundMsg = msg
 				return false
@@ -367,6 +468,9 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 	})
 
 	if foundMsg != nil {
+		s.logger.Info().
+			Str("fqn", fqn).
+			Msg("Found message in protoregistry - using protoregistry path")
 		fields := make([]map[string]interface{}, 0)
 		msgFields := foundMsg.Fields()
 		for i := 0; i < msgFields.Len(); i++ {
@@ -390,6 +494,17 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 					enumNames = append(enumNames, string(vals.Get(j).Name()))
 				}
 				fi["enumValues"] = enumNames
+			}
+			// Add oneof information
+			if oneof := fd.ContainingOneof(); oneof != nil {
+				s.logger.Info().
+					Str("field", string(fd.Name())).
+					Str("oneofName", string(oneof.Name())).
+					Str("message", string(foundMsg.Name())).
+					Str("package", string(foundMsg.ParentFile().Package())).
+					Msg("Found oneof field via protoregistry")
+				fi["oneof"] = true
+				fi["oneofName"] = string(oneof.Name())
 			}
 			fields = append(fields, fi)
 		}
@@ -484,6 +599,18 @@ func (s *Service) extractComprehensiveFields(msg *desc.MessageDescriptor, prefix
 			fieldInfo["enumValues"] = enumNames
 		}
 		
+		// Add oneof information
+		if oneof := field.GetOneOf(); oneof != nil {
+			s.logger.Info().
+				Str("field", field.GetName()).
+				Str("oneofName", oneof.GetName()).
+				Str("message", msg.GetName()).
+				Str("path", fieldPath).
+				Msg("Found oneof field via comprehensive extraction")
+			fieldInfo["oneof"] = true
+			fieldInfo["oneofName"] = oneof.GetName()
+		}
+		
 		// Add message type if it's a message field
 		if field.GetMessageType() != nil {
 			fieldInfo["messageType"] = field.GetMessageType().GetFullyQualifiedName()
@@ -543,6 +670,19 @@ func (s *Service) extractComprehensiveFieldsFromProtoreflect(msg protoreflect.Me
 			fieldInfo["enumValues"] = enumNames
 		}
 		
+		// Add oneof information
+		if oneof := fd.ContainingOneof(); oneof != nil {
+			s.logger.Info().
+				Str("field", string(fd.Name())).
+				Str("oneofName", string(oneof.Name())).
+				Str("message", string(msg.Name())).
+				Str("package", string(msg.ParentFile().Package())).
+				Str("path", fieldPath).
+				Msg("Found oneof field via protoreflect comprehensive extraction")
+			fieldInfo["oneof"] = true
+			fieldInfo["oneofName"] = string(oneof.Name())
+		}
+		
 		// Add message type if it's a message field
 		if fd.Message() != nil {
 			fieldInfo["messageType"] = string(fd.Message().FullName())
@@ -587,4 +727,41 @@ func (s *Service) GetFileDescriptor(path string) (protoreflect.FileDescriptor, e
 // SetLogger sets the logger for the service
 func (s *Service) SetLogger(logger zerolog.Logger) {
 	s.logger = logger
+}
+
+// GetSchemaService returns the schema service
+func (s *Service) GetSchemaService() *SchemaService {
+	return s.schema
+}
+
+// LoadFromDatabase loads the latest registry descriptor from DB and populates in-memory registry.
+// If cache has parsed registry for the same SHA, reuse it.
+func (s *Service) LoadFromDatabase(ctx context.Context, name string) error {
+	if s.repo == nil {
+		return fmt.Errorf("repository not configured")
+	}
+	rec, err := s.repo.GetLatestByName(ctx, name)
+	if err != nil {
+		return err
+	}
+	// If cached, reuse parsed registry
+	if cached, ok := s.parsedCache[rec.DescriptorSHA256]; ok && cached != nil {
+		s.mu.Lock()
+		s.files = cached
+		s.lastSHA = rec.DescriptorSHA256
+		s.mu.Unlock()
+		return nil
+	}
+	// Parse descriptor bytes
+	var descriptorSet descriptorpb.FileDescriptorSet
+	if err := proto.Unmarshal(rec.DescriptorBytes, &descriptorSet); err != nil {
+		return fmt.Errorf("failed to unmarshal descriptor set from DB: %w", err)
+	}
+	// Register into service and populate cache
+	if err := s.registerDescriptorSet(&descriptorSet); err != nil {
+		return err
+	}
+	s.parsedCache[rec.DescriptorSHA256] = s.files
+	s.lastSHA = rec.DescriptorSHA256
+	return nil
 }

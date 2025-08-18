@@ -9,7 +9,8 @@ import {
   RunRequest, 
   RunResponse,
   ProtoRegisterRequest,
-  MessageFieldsResponse 
+  MessageFieldsResponse,
+  MessageSchemaMeta 
 } from './types';
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:8088';
@@ -79,6 +80,10 @@ export const protoApi = {
     
   getMessageFields: (fqn: string): Promise<MessageFieldsResponse> =>
     apiRequest(`/api/registry/messages/${encodeURIComponent(fqn)}/fields`),
+
+  // Optional advanced schema endpoint (backend may or may not expose it)
+  getMessageSchema: async (fqn: string): Promise<MessageSchemaMeta> =>
+    apiRequest(`/api/registry/messages/${encodeURIComponent(fqn)}/schema`),
 };
 
 // Collections API
@@ -161,5 +166,42 @@ export const runnerApi = {
       body: JSON.stringify(data),
     }),
 };
+
+// Preferences API
+export const preferencesApi = {
+  get: (): Promise<{ confirmDeleteRequest: boolean }> =>
+    apiRequest('/api/preferences'),
+  update: (data: { confirmDeleteRequest?: boolean }): Promise<{ confirmDeleteRequest?: boolean }> =>
+    apiRequest('/api/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+};
+
+// Transactional save-request API
+export type SaveRequestPayload = {
+  collection: { id?: string; name?: string; description?: string };
+  request: {
+    id?: string;
+    name: string;
+    verb: string;
+    url: string;
+    headers: Record<string, any>;
+    bodyModel: Record<string, any>;
+    protoMessageFqmn?: string;
+    timeoutMs?: number;
+  };
+};
+
+export type SaveRequestResponse = {
+  collection: Record<string, any>;
+  request: Record<string, any>;
+};
+
+export const saveRequest = (payload: SaveRequestPayload): Promise<SaveRequestResponse> =>
+  apiRequest('/api/v1/save-request', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 
 export { ApiError };

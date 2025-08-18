@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronRight, ChevronDown, Folder, FileText, Plus, Trash2, Globe, Pencil, Archive } from 'lucide-react';
 import { Collection, Environment } from '../lib/types';
-import { useCreateCollection, useCreateRequest, useDeleteCollection, useDeleteRequest, useCreateEnvironment, useUpdateEnvironment, useDeleteEnvironment, useUpdateCollection } from '../lib/useData';
+import { useCreateCollection, useDeleteCollection, useDeleteRequest, useCreateEnvironment, useUpdateEnvironment, useDeleteEnvironment, useUpdateCollection } from '../lib/useData';
 import { EnvironmentModal } from './EnvironmentModal';
 import { CollectionEditModal } from './CollectionEditModal';
 import { CreateCollectionModal } from './CreateCollectionModal';
-import { CreateRequestModal } from './CreateRequestModal';
+import { preferencesApi } from '../lib/api';
 
 interface SidebarProps {
   collections: Collection[];
@@ -28,11 +28,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set());
   const [showCreateCollection, setShowCreateCollection] = useState(false);
-  const [showCreateRequest, setShowCreateRequest] = useState(false);
-  const [creatingForCollection, setCreatingForCollection] = useState<string | null>(null);
 
   const createCollection = useCreateCollection();
-  const createRequest = useCreateRequest();
   const deleteCollection = useDeleteCollection();
   const deleteRequest = useDeleteRequest();
   const updateCollection = useUpdateCollection();
@@ -42,6 +39,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [showEnvModal, setShowEnvModal] = useState(false);
   const [editingEnv, setEditingEnv] = useState<Environment | null>(null);
   const [editingCollectionId, setEditingCollectionId] = useState<string | null>(null);
+
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [dontAskAgain, setDontAskAgain] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ collectionId: string; requestId: string } | null>(null);
+  const [confirmDeletePref, setConfirmDeletePref] = useState<boolean>(true);
+
+  const pendingNames = React.useMemo(() => {
+    if (!pendingDelete) return { collectionName: '', requestName: '' };
+    const col = collections.find(c => c.id === pendingDelete.collectionId);
+    const req = col?.requests.find(r => r.id === pendingDelete.requestId);
+    return { collectionName: col?.name || '', requestName: req?.name || '' };
+  }, [pendingDelete, collections]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const p = await preferencesApi.get();
+        if (typeof p.confirmDeleteRequest === 'boolean') setConfirmDeletePref(p.confirmDeleteRequest);
+      } catch {}
+    })();
+  }, []);
 
   const toggleCollection = (collectionId: string) => {
     const newExpanded = new Set(expandedCollections);
@@ -54,13 +73,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleCreateRequest = async (collectionId: string) => {
-    setCreatingForCollection(collectionId);
-    setShowCreateRequest(true);
-    try {
-      // Best-effort refresh of proto types so dropdowns are not empty on first use
-      const res = await fetch('/api/registry/messages');
-      void res.ok;
-    } catch (_) {}
+    const col = collections.find(c => c.id === collectionId) || null;
+    onCollectionSelect(col);
+    setExpandedCollections(prev => new Set([...Array.from(prev), collectionId]));
+    onRequestSelect(collectionId, '');
   };
 
   const handleCollectionDelete = async (collectionId: string) => {
@@ -72,13 +88,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const handleRequestDelete = async (collectionId: string, requestId: string) => {
-    if (window.confirm('Are you sure you want to delete this request?')) {
-      await deleteRequest.mutateAsync({ collectionId, requestId });
-      if (selectedRequest === requestId) {
-        onRequestSelect(collectionId, '');
-      }
+  const confirmAndDeleteRequest = async (collectionId: string, requestId: string) => {
+    await deleteRequest.mutateAsync({ collectionId, requestId });
+    if (selectedRequest === requestId) {
+      onRequestSelect(collectionId, '');
     }
+  };
+
+  const handleRequestDelete = async (collectionId: string, requestId: string) => {
+    if (!confirmDeletePref) {
+      await confirmAndDeleteRequest(collectionId, requestId);
+      return;
+    }
+    setPendingDelete({ collectionId, requestId });
+    setDontAskAgain(false);
+    setShowDeleteModal(true);
   };
 
   return (
@@ -190,7 +214,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         {collection.requests.map((request) => (
                           <div
                             key={request.id}
-                            className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${
+                            className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${
                               selectedRequest === request.id 
                                 ? 'bg-primary-100 text-primary-700' 
                                 : 'hover:bg-gray-50'
@@ -204,7 +228,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 {request.method}
                               </span>
                             </div>
-                            
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -261,7 +284,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
                         title="Delete Environment"
                         onClick={async () => {
-                          if (!confirm(`Delete environment \"${env.name}\"?`)) return;
+                          if (!confirm(`Delete environment "${env.name}"?`)) return;
                           await deleteEnvironment.mutateAsync(env.name);
                         }}
                       >
@@ -283,32 +306,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onCreate={async (data) => {
           try {
             const created = await createCollection.mutateAsync(data);
-            // Close modal and select the new collection
             setShowCreateCollection(false);
             if (created?.id) {
               onCollectionSelect(created as any);
-              // expand the new collection
               setExpandedCollections(prev => new Set([...Array.from(prev), created.id]));
             }
           } catch (e) {
-            // leave modal open to show errors if any (optional: add toast)
             console.error('Failed to create collection', e);
           }
         }}
         isLoading={createCollection.isLoading}
-      />
-
-      {/* Create Request Modal */}
-      <CreateRequestModal
-        isOpen={showCreateRequest}
-        onClose={() => setShowCreateRequest(false)}
-        onCreate={createRequest.mutate}
-        isLoading={createRequest.isLoading}
-        collectionId={creatingForCollection}
-        onSuccess={() => {
-          setShowCreateRequest(false);
-          setCreatingForCollection(null);
-        }}
       />
 
       {/* Environment Modal (Create) */}
@@ -322,7 +329,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }}
         onSave={async (env) => {
           if (editingEnv) {
-            // If the name changed, we simulate rename by delete+create (in-memory backend)
             if (env.name !== editingEnv.name) {
               await deleteEnvironment.mutateAsync(editingEnv.name);
               await createEnvironment.mutateAsync(env as any);
@@ -355,6 +361,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
           />
         );
       })()}
+
+      {/* Delete Request Confirm Modal */}
+      {showDeleteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setShowDeleteModal(false);
+            if (e.key === 'Enter') {
+              const btn = document.getElementById('confirm-delete-btn') as HTMLButtonElement | null;
+              btn?.click();
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg shadow-lg w-[560px] p-5" role="dialog" aria-modal="true">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Delete request?</h3>
+            <p className="text-sm text-gray-600 mb-4">Are you sure you want to delete “{pendingNames.requestName}” from {pendingNames.collectionName}?</p>
+            <label className="flex items-center gap-2 mb-4 text-sm text-gray-700">
+              <input type="checkbox" checked={dontAskAgain} onChange={(e) => setDontAskAgain(e.target.checked)} />
+              Skip confirmation next time
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                autoFocus
+                className="px-3 py-1.5 rounded border text-sm"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                id="confirm-delete-btn"
+                className="px-3 py-1.5 rounded bg-red-600 text-white text-sm"
+                onClick={async () => {
+                  try {
+                    if (dontAskAgain) {
+                      await preferencesApi.update({ confirmDeleteRequest: false });
+                      setConfirmDeletePref(false);
+                    }
+                    if (pendingDelete) {
+                      await confirmAndDeleteRequest(pendingDelete.collectionId, pendingDelete.requestId);
+                    }
+                  } finally {
+                    setShowDeleteModal(false);
+                    setPendingDelete(null);
+                  }
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

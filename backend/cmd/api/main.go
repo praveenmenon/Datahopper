@@ -15,6 +15,7 @@ import (
 	"github.com/datahopper/backend/internal/store"
 	"github.com/datahopper/backend/internal/workspace"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -22,14 +23,41 @@ func main() {
 	logger := obs.NewLogger()
 	logger.Info().Msg("Starting DataHopper backend...")
 
+	// Initialize DB pool if DSN provided
+	dsn := os.Getenv("DB_DSN")
+	var pool *pgxpool.Pool
+	if dsn != "" {
+		ctx := context.Background()
+		var err error
+		pool, err = pgxpool.New(ctx, dsn)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("failed to create pgx pool")
+		}
+		if err := pool.Ping(ctx); err != nil {
+			logger.Fatal().Err(err).Msg("failed to ping database")
+		}
+		logger.Info().Msg("Connected to PostgreSQL")
+	} else {
+		logger.Warn().Msg("DB_DSN not set; running without PostgreSQL persistence")
+	}
+
 	// Initialize services
 	store := store.NewInMemoryStore()
-	registry := registry.NewService()
+	regSvc := registry.NewService()
+	if pool != nil {
+		regSvc = regSvc.WithRepository(registry.NewRepository(pool))
+		// Attempt to load latest registry on startup; ignore error if none
+		_ = regSvc.LoadFromDatabase(context.Background(), "default")
+	}
 	workspace := workspace.NewService(store)
-	runner := runner.NewService(registry)
+	runner := runner.NewService(regSvc)
 
 	// Initialize HTTP API
-	api := httpapi.NewAPI(registry, workspace, runner, logger)
+	api := httpapi.NewAPI(regSvc, workspace, runner, logger)
+	// Stash pool for save-request handler shim
+	if pool != nil {
+		httpapi.ApiRunnerPoolSet(pool)
+	}
 
 	// Setup Gin router
 	gin.SetMode(gin.ReleaseMode)

@@ -275,9 +275,9 @@ func BuildFromFields(fields []interface{}) (map[string]interface{}, error) {
 
 // coerceValue attempts to convert string inputs into appropriate JSON-native types
 // - "true"/"false" -> bool
-// - numeric strings -> float64 (JSON number)
 // - "null" -> nil
 // - JSON objects/arrays -> map[string]interface{} / []interface{}
+// - Simple strings (like "4444") remain as strings and are NOT converted to numbers
 // Otherwise returns the original value
 func coerceValue(val interface{}) interface{} {
     s, ok := val.(string)
@@ -298,12 +298,28 @@ func coerceValue(val interface{}) interface{} {
         return s
     }
 
-    // Try to parse as a JSON literal (bool/number/null or quoted string)
-    var v interface{}
-    if err := json.Unmarshal([]byte(str), &v); err == nil {
-        return v
+    // Only coerce JSON literals (bool/null/number)
+    if str == "true" {
+        return true
+    }
+    if str == "false" {
+        return false
+    }
+    if str == "null" {
+        return nil
     }
 
+    // Attempt to parse as a JSON number (e.g., 30, 1.25, 1e3)
+    // json.Unmarshal will convert JSON numbers to float64
+    var num interface{}
+    if err := json.Unmarshal([]byte(str), &num); err == nil {
+        switch num.(type) {
+        case float64:
+            return num
+        }
+    }
+
+    // Return the original string for everything else
     return s
 }
 

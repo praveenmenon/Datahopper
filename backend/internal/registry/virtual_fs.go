@@ -9,9 +9,12 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"context"
+	"crypto/sha256"
 
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/desc/protoparse"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -235,6 +238,10 @@ func (s *Service) rewriteImports(content string, basenameToFile map[string]strin
 // storeProtoparseDescriptors stores desc.FileDescriptor objects directly
 // This avoids conversion issues with Google imports since protoparse already resolved them
 func (s *Service) storeProtoparseDescriptors(fileDescriptors []*desc.FileDescriptor) error {
+	s.logger.Info().
+		Int("fileDescriptorCount", len(fileDescriptors)).
+		Msg("storeProtoparseDescriptors called - STARTING FUNCTION")
+	
 	// Store the parsed descriptors directly in our service
 	// Filter to only user proto files (not Google well-known types)
 	var userFiles []*desc.FileDescriptor
@@ -254,6 +261,27 @@ func (s *Service) storeProtoparseDescriptors(fileDescriptors []*desc.FileDescrip
 	
 	// Store the descriptors directly for desc-based lookups
 	s.descFiles = userFiles
+	
+	// Debug: Log what messages are in each file
+	for _, fd := range userFiles {
+		packageName := fd.GetPackage()
+		messages := fd.GetMessageTypes()
+		s.logger.Info().
+			Str("filename", fd.GetName()).
+			Str("package", packageName).
+			Int("messageCount", len(messages)).
+			Msg("Stored file descriptor")
+		
+		for _, msg := range messages {
+			msgFqn := fmt.Sprintf("%s.%s", packageName, msg.GetName())
+			s.logger.Info().
+				Str("filename", fd.GetName()).
+				Str("package", packageName).
+				Str("messageName", msg.GetName()).
+				Str("messageFqn", msgFqn).
+				Msg("Stored message descriptor")
+		}
+	}
 
 	// Additionally, convert to a FileDescriptorSet and merge into protoregistry so
 	// callers that rely on protoregistry (e.g., encoder) can find message descriptors
@@ -273,6 +301,24 @@ func (s *Service) storeProtoparseDescriptors(fileDescriptors []*desc.FileDescrip
 	addWellKnown("google/protobuf/timestamp.proto")
 	if err := s.registerDescriptorSet(set); err != nil {
 		return fmt.Errorf("failed to register protoparse descriptors into registry: %w", err)
+	}
+	
+	// Persist to DB if configured
+	if s.repo != nil {
+		bytes, err := proto.Marshal(set)
+		if err == nil {
+			sum := sha256.Sum256(bytes)
+			sha := fmt.Sprintf("%x", sum[:])
+			ctx := context.Background()
+			if err := s.repo.UpsertRegistry(ctx, "default", bytes, sha); err != nil {
+				s.logger.Error().Err(err).Msg("failed to upsert registry descriptor (virtual fs)")
+			}
+			if s.lastSHA != "" && s.lastSHA != sha {
+				delete(s.parsedCache, s.lastSHA)
+			}
+			s.parsedCache[sha] = s.files
+			s.lastSHA = sha
+		}
 	}
 	
 	s.logger.Info().Int("storedCount", len(userFiles)).Msg("Successfully stored proto file descriptors")

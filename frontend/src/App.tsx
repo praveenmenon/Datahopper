@@ -50,6 +50,16 @@ function App() {
     }
   }, [environmentsLoading, environments, activeEnvironment]);
 
+  // Keep selected collection reference in sync with refreshed query data
+  useEffect(() => {
+    if (selectedCollection) {
+      const updated = collections.find(c => c.id === selectedCollection.id);
+      if (updated && updated !== selectedCollection) {
+        setSelectedCollection(updated);
+      }
+    }
+  }, [collections, selectedCollection]);
+
   const handleRequestSelect = (collectionId: string, requestId: string) => {
     const collection = collections.find(c => c.id === collectionId);
     if (collection) {

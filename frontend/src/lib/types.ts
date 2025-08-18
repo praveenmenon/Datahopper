@@ -27,6 +27,8 @@ export interface Request {
   timeoutSeconds?: number;
   createdAt: string;
   updatedAt: string;
+  lastResponse?: Record<string, any> | null;
+  lastResponseAt?: string | null;
 }
 
 export interface Collection {
@@ -87,6 +89,8 @@ export interface RunRequest {
   body: BodyField[];
   timeoutSeconds?: number;
   variables: Record<string, string>;
+  collectionId?: string;
+  requestId?: string;
 }
 
 export interface RunResponse {
@@ -121,11 +125,71 @@ export interface MessageField {
   messageType?: string;
   enum?: boolean;
   enumValues?: string[];
+  // Oneof information
+  oneof?: boolean;
+  oneofName?: string;
+  oneofIndex?: number;
 }
 
 export interface MessageFieldsResponse {
   fqn: string;
   fields: MessageField[];
+}
+
+// Comprehensive schema (optional, if backend exposes /schema)
+export interface EnumValueMeta {
+  name: string;
+  number: number;
+  deprecated?: boolean;
+}
+
+export interface EnumMeta {
+  name: string;
+  values: EnumValueMeta[];
+}
+
+export interface MapMeta {
+  keyKind: string;
+  valueKind: string;
+  valueFqmn?: string;
+}
+
+export interface WellKnownTypeMeta {
+  type: string;
+  format?: string;
+}
+
+export interface FieldSchemaMeta {
+  name: string;
+  jsonName?: string;
+  number: number;
+  kind: string; // string, int32, message, enum, etc.
+  cardinality: 'optional' | 'repeated' | 'map';
+  hasPresence: boolean;
+  defaultValue?: any;
+  oneofIndex?: number | null;
+  deprecated?: boolean;
+  messageFqmn?: string;
+  enum?: EnumMeta;
+  map?: MapMeta;
+  wkt?: WellKnownTypeMeta;
+  bytesHint?: string;
+}
+
+export interface OneofGroupMeta {
+  index: number;
+  name: string;
+  fields: string[];
+}
+
+export interface MessageSchemaMeta {
+  fqmn: string;
+  descriptorHash?: string;
+  fields: FieldSchemaMeta[];
+  oneofs: OneofGroupMeta[];
+  wkt?: WellKnownTypeMeta;
+  reservedNumbers?: number[];
+  reservedNames?: string[];
 }
 
 // UI state types
