@@ -54,6 +54,10 @@ func main() {
 
 	// Initialize HTTP API
 	api := httpapi.NewAPI(regSvc, workspace, runner, logger)
+	// Stash pool for save-request handler shim
+	if pool != nil {
+		httpapi.ApiRunnerPoolSet(pool)
+	}
 
 	// Setup Gin router
 	gin.SetMode(gin.ReleaseMode)

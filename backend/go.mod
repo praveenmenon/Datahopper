@@ -6,6 +6,7 @@ toolchain go1.24.2
 
 require (
 	github.com/gin-gonic/gin v1.9.1
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/jhump/protoreflect v1.17.0
 	github.com/rs/zerolog v1.31.0

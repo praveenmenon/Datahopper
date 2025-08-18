@@ -27,6 +27,8 @@ export interface Request {
   timeoutSeconds?: number;
   createdAt: string;
   updatedAt: string;
+  lastResponse?: Record<string, any> | null;
+  lastResponseAt?: string | null;
 }
 
 export interface Collection {
@@ -87,6 +89,8 @@ export interface RunRequest {
   body: BodyField[];
   timeoutSeconds?: number;
   variables: Record<string, string>;
+  collectionId?: string;
+  requestId?: string;
 }
 
 export interface RunResponse {

@@ -167,4 +167,41 @@ export const runnerApi = {
     }),
 };
 
+// Preferences API
+export const preferencesApi = {
+  get: (): Promise<{ confirmDeleteRequest: boolean }> =>
+    apiRequest('/api/preferences'),
+  update: (data: { confirmDeleteRequest?: boolean }): Promise<{ confirmDeleteRequest?: boolean }> =>
+    apiRequest('/api/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+};
+
+// Transactional save-request API
+export type SaveRequestPayload = {
+  collection: { id?: string; name?: string; description?: string };
+  request: {
+    id?: string;
+    name: string;
+    verb: string;
+    url: string;
+    headers: Record<string, any>;
+    bodyModel: Record<string, any>;
+    protoMessageFqmn?: string;
+    timeoutMs?: number;
+  };
+};
+
+export type SaveRequestResponse = {
+  collection: Record<string, any>;
+  request: Record<string, any>;
+};
+
+export const saveRequest = (payload: SaveRequestPayload): Promise<SaveRequestResponse> =>
+  apiRequest('/api/v1/save-request', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
 export { ApiError };
