@@ -4,6 +4,27 @@
 
 @layer base {
   :root {
+    /* text/caret used by the overlay/input */
+    --dh-fg:            #111827;                /* neutral-900 on light */
+    --dh-caret:         #0f172a;                /* slate-900 */
+
+    /* border color for the input outline (neutral) */
+    --dh-input-border:  #d1d5db;                /* gray-300 */
+
+    /* chip backgrounds/foregrounds (translucent so they work on any surface) */
+    --dh-chip-known-bg:   color-mix(in oklab, #22c55e 20%, transparent);
+    --dh-chip-known-fg:   #14532d;
+    --dh-chip-unknown-bg: color-mix(in oklab, #f59e0b 22%, transparent);
+    --dh-chip-unknown-fg: #713f12;
+
+    /* ring/outline when variables are present */
+    --dh-ring-success:  #10b981;                /* emerald-500 */
+    --dh-ring-warn:     #f59e0b;                /* amber-500 */
+
+    /* icon colors */
+    --dh-icon-success:  #22c55e;
+    --dh-icon-warn:     #eab308;
+
     --color-primary-50: #eff6ff;
     --color-primary-100: #dbeafe;
     --color-primary-200: #bfdbfe;
@@ -16,6 +37,18 @@
     --color-primary-900: #1e3a8a;
   }
   .dark {
+    --dh-fg:            #ffffff;
+    --dh-caret:         #ffffff;
+    --dh-input-border:  #374151;                /* gray-700 */
+    --dh-chip-known-bg:   color-mix(in oklab, #22c55e 24%, transparent);
+    --dh-chip-known-fg:   #d1fae5;
+    --dh-chip-unknown-bg: color-mix(in oklab, #f59e0b 28%, transparent);
+    --dh-chip-unknown-fg: #fde68a;
+    --dh-ring-success:  #10b981;
+    --dh-ring-warn:     #f59e0b;
+    --dh-icon-success:  #10b981;
+    --dh-icon-warn:     #f59e0b;
+
     --color-primary-50: #0b1220;
     --color-primary-100: #0f172a; /* slate-900 */
     --color-primary-200: #111827; /* gray-900 */
@@ -44,6 +77,15 @@
   
   .card {
     @apply bg-white rounded-lg shadow-sm border border-gray-200;
+  }
+
+  /* neutralize autofill/backgrounds across themes */
+  .va-input {
+    background-color: transparent !important;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent !important;
+    caret-color: var(--dh-caret);
+    border-color: var(--dh-input-border);
   }
 
   /* Dark mode UI polish */
