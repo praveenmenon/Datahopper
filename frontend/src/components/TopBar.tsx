@@ -23,9 +23,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const registerProto = useRegisterProto();
 
-  const handleEnvironmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onEnvironmentChange(e.target.value);
-  };
+  // Note: native select removed; using Dropdown component instead
 
   return (
     <>
