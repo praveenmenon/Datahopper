@@ -417,37 +417,55 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   return (
     <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 dark:text-white">
       {/* Request Header */}
-      <div className="border-b border-gray-200 dark:border-gray-700 p-4 pb-[9px] relative z-0">
-        <div className="flex items-center space-x-4">
-          {/* Request Name */}
-          <input
-            type="text"
-            value={requestName}
-            onChange={(e) => setRequestName(e.target.value)}
-            placeholder="Request name"
-            className="w-56 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          />
-
-          {/* Method Selector */}
-          <div className="w-28">
-            <Dropdown
-              options={['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].map(m => ({ label: m, value: m }))}
-              value={method}
-              onChange={setMethod}
+      <div className="border-b border-gray-200 dark:border-gray-700 p-4 pb-[9px] relative z-40">
+        <div className="space-y-3">
+          {/* Row 1: Request name (left) + Save (right) */}
+          <div className="flex items-center justify-between">
+            <input
+              type="text"
+              value={requestName}
+              onChange={(e) => setRequestName(e.target.value)}
+              placeholder="Request name"
+              className="w-64 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
+            <button
+              onClick={handleSave}
+              disabled={!collection}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors disabled:opacity-50"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {'Save'}
+            </button>
           </div>
 
-          {/* URL Input */}
-          <div className="flex-1">
-            <VariableAwareInput
-              value={url}
-              onChange={(e) => setUrl((e.target as HTMLInputElement).value)}
-              placeholder="Enter URL (supports {{variables}})"
-              variables={{
-                ...(collection?.variables || {}),
-                ...(environment?.variables || {}),
-              }}
-            />
+          {/* Row 2: Method + URL + Send */}
+          <div className="flex items-center space-x-4">
+            <div className="w-28">
+              <Dropdown
+                options={['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].map(m => ({ label: m, value: m }))}
+                value={method}
+                onChange={setMethod}
+              />
+            </div>
+            <div className="flex-1">
+              <VariableAwareInput
+                value={url}
+                onChange={(e) => setUrl((e.target as HTMLInputElement).value)}
+                placeholder="Enter URL (supports {{variables}})"
+                variables={{
+                  ...(collection?.variables || {}),
+                  ...(environment?.variables || {}),
+                }}
+              />
+            </div>
+            <button
+              onClick={handleSend}
+              disabled={runRequest.isLoading || !url.trim()}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              {runRequest.isLoading ? 'Sending...' : 'Send'}
+            </button>
           </div>
 
           {/* Resolved URL Preview */}
@@ -459,26 +477,6 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
               </span>
             </div>
           )}
-
-          {/* Action Buttons */}
-          <div className="flex space-x-2">
-            <button
-              onClick={handleSave}
-              disabled={!collection}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors disabled:opacity-50"
-            >
-              <Save className="h-4 w-4 mr-2" />
-              {'Save'}
-            </button>
-            <button
-              onClick={handleSend}
-              disabled={runRequest.isLoading || !url.trim()}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <Play className="h-4 w-4 mr-2" />
-              {runRequest.isLoading ? 'Sending...' : 'Send'}
-            </button>
-          </div>
         </div>
       </div>
 

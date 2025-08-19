@@ -65,9 +65,9 @@ export const Dropdown: React.FC<DropdownProps> = ({
                 <button
                   type="button"
                   className={clsx(
-                    'w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:!bg-primary-900/40',
+                    'w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/40',
                     value === opt.value
-                      ? 'text-primary-700 dark:text-primary-300 font-medium bg-primary-50 dark:bg-primary-900/40'
+                      ? 'font-medium bg-gray-50 dark:bg-gray-700/40 text-gray-700 dark:text-gray-200'
                       : 'text-gray-700 dark:text-gray-200',
                     itemClassName
                   )}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { CreateRequestRequest } from '../lib/types';
+import { Dropdown } from './Dropdown';
 
 interface CreateRequestModalProps {
   isOpen: boolean;
@@ -116,16 +117,11 @@ export const CreateRequestModal: React.FC<CreateRequestModalProps> = ({
               <label htmlFor="method" className="block text-sm font-medium text-gray-700 mb-2">
                 Method *
               </label>
-              <select
-                id="method"
+              <Dropdown
+                options={httpMethods.map(m => ({ label: m, value: m }))}
                 value={method}
-                onChange={(e) => setMethod(e.target.value)}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              >
-                {httpMethods.map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
+                onChange={setMethod}
+              />
             </div>
             <div className="col-span-2">
               <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">

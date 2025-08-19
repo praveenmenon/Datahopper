@@ -146,7 +146,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div
                       className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${
                         isSelected 
-                          ? 'bg-primary-50 text-primary-700 border border-primary-200 dark:bg-primary-900/60 dark:text-white dark:border-primary-900/70' 
+                          ? 'bg-gray-50 text-gray-900 border border-gray-200 dark:bg-gray-700/40 dark:text-white dark:border-gray-600' 
                           : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
                       }`}
                       onClick={() => onCollectionSelect(collection)}
@@ -216,7 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             key={request.id}
                             className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${
                               selectedRequest === request.id 
-                                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/60 dark:text-white' 
+                                ? 'bg-gray-50 text-gray-900 dark:bg-gray-700/40 dark:text-white' 
                                 : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
                             }`}
                             onClick={() => onRequestSelect(collection.id, request.id)}
