@@ -29,6 +29,23 @@ func SetByPath(root map[string]interface{}, path string, value interface{}) map[
 				// Invalid array access pattern, just return without doing anything
 				return root
 			} else {
+				// Merge-friendly behavior: avoid overwriting existing maps with empty {}
+				if existing, exists := current[part]; exists {
+					if existingMap, ok := existing.(map[string]interface{}); ok {
+						if newMap, ok2 := value.(map[string]interface{}); ok2 {
+							// If new map is empty, keep existing
+							if len(newMap) == 0 {
+								return root
+							}
+							// Merge keys into existing map
+							for k, v := range newMap {
+								existingMap[k] = v
+							}
+							current[part] = existingMap
+							return root
+						}
+					}
+				}
 				current[part] = value
 			}
 			return root

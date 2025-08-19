@@ -107,6 +107,7 @@ func (api *API) SetupRoutes(router *gin.Engine) {
 // Preferences payload
 type Preferences struct {
     ConfirmDeleteRequest *bool `json:"confirmDeleteRequest"`
+    ActiveEnvironment    *string `json:"activeEnvironment,omitempty"`
 }
 
 func (api *API) getPreferences(c *gin.Context) {
@@ -120,10 +121,17 @@ func (api *API) getPreferences(c *gin.Context) {
     var v sql.NullBool
     if err := row.Scan(&v); err != nil {
         // default if missing
-        c.JSON(http.StatusOK, Preferences{ConfirmDeleteRequest: ptrBool(true)})
-        return
+        v.Bool = true
+        v.Valid = true
     }
-    c.JSON(http.StatusOK, Preferences{ConfirmDeleteRequest: ptrBool(v.Bool)})
+    var active sql.NullString
+    _ = apiRunnerPool.QueryRow(ctx, `SELECT text_value FROM preferences WHERE key='active_environment'`).Scan(&active)
+    var ae *string
+    if active.Valid && strings.TrimSpace(active.String) != "" {
+        s := active.String
+        ae = &s
+    }
+    c.JSON(http.StatusOK, Preferences{ConfirmDeleteRequest: ptrBool(v.Bool), ActiveEnvironment: ae})
 }
 
 func (api *API) updatePreferences(c *gin.Context) {
@@ -142,6 +150,15 @@ func (api *API) updatePreferences(c *gin.Context) {
             ON CONFLICT (key) DO UPDATE SET bool_value=EXCLUDED.bool_value, updated_at=NOW()` , *p.ConfirmDeleteRequest)
         if err != nil {
             api.logger.Error().Err(err).Msg("Failed to update preferences")
+            c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update preferences"})
+            return
+        }
+    }
+    if p.ActiveEnvironment != nil {
+        _, err := apiRunnerPool.Exec(ctx, `INSERT INTO preferences(key,text_value) VALUES('active_environment',$1)
+            ON CONFLICT (key) DO UPDATE SET text_value=EXCLUDED.text_value, updated_at=NOW()`, *p.ActiveEnvironment)
+        if err != nil {
+            api.logger.Error().Err(err).Msg("Failed to update active_environment preference")
             c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update preferences"})
             return
         }
@@ -941,6 +958,29 @@ func (api *API) deleteRequest(c *gin.Context) {
 
 // Environments
 func (api *API) listEnvironments(c *gin.Context) {
+	if apiRunnerPool != nil {
+		ctx := context.Background()
+		rows, err := apiRunnerPool.Query(ctx, `SELECT name, variables FROM environments ORDER BY name`)
+		if err != nil {
+			api.logger.Error().Err(err).Msg("Failed to query environments")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list environments"})
+			return
+		}
+		defer rows.Close()
+		out := make([]types.Environment, 0)
+		for rows.Next() {
+			var name string
+			var varsJSON []byte
+			if err := rows.Scan(&name, &varsJSON); err == nil {
+				vars := map[string]string{}
+				_ = json.Unmarshal(varsJSON, &vars)
+				out = append(out, types.Environment{Name: name, Variables: vars})
+			}
+		}
+		c.JSON(http.StatusOK, out)
+		return
+	}
+
 	environments, err := api.workspace.ListEnvironments()
 	if err != nil {
 		api.logger.Error().Err(err).Msg("Failed to list environments")
@@ -955,6 +995,22 @@ func (api *API) createEnvironment(c *gin.Context) {
 	var env types.Environment
 	if err := c.ShouldBindJSON(&env); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if apiRunnerPool != nil {
+		ctx := context.Background()
+		if env.Variables == nil {
+			env.Variables = map[string]string{}
+		}
+		buf, _ := json.Marshal(env.Variables)
+		_, err := apiRunnerPool.Exec(ctx, `INSERT INTO environments(name, variables) VALUES ($1,$2) ON CONFLICT (name) DO UPDATE SET variables=EXCLUDED.variables, updated_at=NOW()`, env.Name, buf)
+		if err != nil {
+			api.logger.Error().Err(err).Msg("Failed to upsert environment")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save environment"})
+			return
+		}
+		c.JSON(http.StatusCreated, env)
 		return
 	}
 
@@ -976,6 +1032,25 @@ func (api *API) updateEnvironment(c *gin.Context) {
 	}
 
 	env.Name = name
+	if apiRunnerPool != nil {
+		ctx := context.Background()
+		if env.Variables == nil {
+			env.Variables = map[string]string{}
+		}
+		buf, _ := json.Marshal(env.Variables)
+		ct, err := apiRunnerPool.Exec(ctx, `UPDATE environments SET variables=$2, updated_at=NOW() WHERE name=$1`, name, buf)
+		if err != nil {
+			api.logger.Error().Err(err).Msg("Failed to update environment")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update environment"})
+			return
+		}
+		if ct.RowsAffected() == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Environment not found"})
+			return
+		}
+		c.JSON(http.StatusOK, env)
+		return
+	}
 	if err := api.workspace.UpdateEnvironment(&env); err != nil {
 		api.logger.Error().Err(err).Msg("Failed to update environment")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -987,6 +1062,22 @@ func (api *API) updateEnvironment(c *gin.Context) {
 
 func (api *API) deleteEnvironment(c *gin.Context) {
 	name := c.Param("name")
+	if apiRunnerPool != nil {
+		ctx := context.Background()
+		ct, err := apiRunnerPool.Exec(ctx, `DELETE FROM environments WHERE name=$1`, name)
+		if err != nil {
+			api.logger.Error().Err(err).Msg("Failed to delete environment")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete environment"})
+			return
+		}
+		if ct.RowsAffected() == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Environment not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Environment deleted successfully"})
+		return
+	}
+
 	if err := api.workspace.DeleteEnvironment(name); err != nil {
 		api.logger.Error().Err(err).Msg("Failed to delete environment")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

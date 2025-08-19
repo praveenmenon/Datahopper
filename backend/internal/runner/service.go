@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,8 +57,8 @@ func (s *Service) Run(req *RunReq) (*RunRes, error) {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 
-    // Process response
-    result, err := s.processResponse(resp, req.ResponseType, req.ErrorResponseType)
+	// Process response
+	result, err := s.processResponse(resp, req.ResponseType, req.ErrorResponseType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process response: %w", err)
 	}
@@ -105,7 +106,7 @@ func (s *Service) buildRequestContext(req *RunReq) (*RequestContext, error) {
 				Str("body", string(bodyJSON)).
 				Msg("Building protobuf body")
 		}
-		
+
 		encodedBody, err := s.encodeProtobufBody(req.ProtoMessage, body, req.Body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode protobuf body: %w", err)
@@ -136,15 +137,15 @@ func (s *Service) buildRequestContext(req *RunReq) (*RequestContext, error) {
 		timeout = 30 // Default 30 seconds
 	}
 
-    return &RequestContext{
-		Method:         req.Method,
-		URL:            interpolatedURL,
-		Headers:        interpolatedHeaders,
-		Body:           body,
-		TimeoutSeconds: timeout,
-		ProtoMessage:   req.ProtoMessage,
-        ResponseType:   req.ResponseType,
-        ErrorResponseType: req.ErrorResponseType,
+	return &RequestContext{
+		Method:            req.Method,
+		URL:               interpolatedURL,
+		Headers:           interpolatedHeaders,
+		Body:              body,
+		TimeoutSeconds:    timeout,
+		ProtoMessage:      req.ProtoMessage,
+		ResponseType:      req.ResponseType,
+		ErrorResponseType: req.ErrorResponseType,
 	}, nil
 }
 
@@ -215,7 +216,7 @@ func (s *Service) encodeProtobufBody(messageType string, body interface{}, origi
 		return nil, fmt.Errorf("failed to marshal protobuf: %w", err)
 	}
 
-return protoBytes, nil
+	return protoBytes, nil
 }
 
 // cleanBodyForProtobufWithDescriptor cleans up the body to handle potential oneof conflicts
@@ -224,7 +225,7 @@ return protoBytes, nil
 func (s *Service) cleanBodyForProtobufWithDescriptor(md protoreflect.MessageDescriptor, body interface{}, originalFields []types.BodyField) interface{} {
 	if bodyMap, ok := body.(map[string]interface{}); ok {
 		cleaned := make(map[string]interface{})
-		
+
 		// Process fields in a deterministic order to handle conflicts
 		keys := make([]string, 0, len(bodyMap))
 		for k := range bodyMap {
@@ -232,7 +233,7 @@ func (s *Service) cleanBodyForProtobufWithDescriptor(md protoreflect.MessageDesc
 		}
 		// Sort keys for deterministic processing
 		sort.Strings(keys)
-		
+
 		// First copy as-is
 		for _, key := range keys {
 			cleaned[key] = bodyMap[key]
@@ -265,10 +266,10 @@ func (s *Service) cleanBodyForProtobufWithDescriptor(md protoreflect.MessageDesc
 				}
 			}
 		}
-		
+
 		return cleaned
 	}
-	
+
 	return body
 }
 
@@ -343,45 +344,45 @@ func (s *Service) transformWellKnownTypesForJSON(md protoreflect.MessageDescript
 // protobuf field kinds where safe/obvious. Currently:
 // - For string fields, convert numeric and boolean inputs to their string representation.
 func (s *Service) coerceJSONTypesToProtoKinds(md protoreflect.MessageDescriptor, m map[string]interface{}) {
-    for i := 0; i < md.Fields().Len(); i++ {
-        fd := md.Fields().Get(i)
-        jsonName := fd.JSONName()
-        val, exists := m[jsonName]
-        if !exists {
-            continue
-        }
+	for i := 0; i < md.Fields().Len(); i++ {
+		fd := md.Fields().Get(i)
+		jsonName := fd.JSONName()
+		val, exists := m[jsonName]
+		if !exists {
+			continue
+		}
 
-        switch fd.Kind() {
-        case protoreflect.StringKind:
-            switch v := val.(type) {
-            case []interface{}:
-                // Repeated string: coerce each element
-                for idx, item := range v {
-                    switch iv := item.(type) {
-                    case int, int32, int64, uint, uint32, uint64, float32, float64, bool:
-                        v[idx] = fmt.Sprint(iv)
-                    }
-                }
-                m[jsonName] = v
-            case int, int32, int64, uint, uint32, uint64, float32, float64, bool:
-                m[jsonName] = fmt.Sprint(v)
-            }
-        case protoreflect.MessageKind:
-            childMd := fd.Message()
-            switch typed := val.(type) {
-            case map[string]interface{}:
-                s.coerceJSONTypesToProtoKinds(childMd, typed)
-            case []interface{}:
-                for idx, item := range typed {
-                    if itemMap, ok := item.(map[string]interface{}); ok {
-                        s.coerceJSONTypesToProtoKinds(childMd, itemMap)
-                        typed[idx] = itemMap
-                    }
-                }
-                m[jsonName] = typed
-            }
-        }
-    }
+		switch fd.Kind() {
+		case protoreflect.StringKind:
+			switch v := val.(type) {
+			case []interface{}:
+				// Repeated string: coerce each element
+				for idx, item := range v {
+					switch iv := item.(type) {
+					case int, int32, int64, uint, uint32, uint64, float32, float64, bool:
+						v[idx] = formatPrimitiveAsString(iv)
+					}
+				}
+				m[jsonName] = v
+			case int, int32, int64, uint, uint32, uint64, float32, float64, bool:
+				m[jsonName] = formatPrimitiveAsString(v)
+			}
+		case protoreflect.MessageKind:
+			childMd := fd.Message()
+			switch typed := val.(type) {
+			case map[string]interface{}:
+				s.coerceJSONTypesToProtoKinds(childMd, typed)
+			case []interface{}:
+				for idx, item := range typed {
+					if itemMap, ok := item.(map[string]interface{}); ok {
+						s.coerceJSONTypesToProtoKinds(childMd, itemMap)
+						typed[idx] = itemMap
+					}
+				}
+				m[jsonName] = typed
+			}
+		}
+	}
 }
 
 // extractInt64 converts various numeric JSON representations into int64.
@@ -409,6 +410,36 @@ func extractInt64(v interface{}) int64 {
 		return 0
 	default:
 		return 0
+	}
+}
+
+// formatPrimitiveAsString ensures numbers render without scientific notation and booleans as literals.
+func formatPrimitiveAsString(v interface{}) string {
+	switch t := v.(type) {
+	case int:
+		return fmt.Sprintf("%d", t)
+	case int32:
+		return fmt.Sprintf("%d", t)
+	case int64:
+		return fmt.Sprintf("%d", t)
+	case uint:
+		return fmt.Sprintf("%d", t)
+	case uint32:
+		return fmt.Sprintf("%d", t)
+	case uint64:
+		return fmt.Sprintf("%d", t)
+	case float32:
+		// Use 'f' with -1 precision to avoid scientific notation where possible
+		return strconv.FormatFloat(float64(t), 'f', -1, 32)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	default:
+		return fmt.Sprint(v)
 	}
 }
 
@@ -546,29 +577,29 @@ func (s *Service) processResponse(resp *ResponseContext, responseType string, er
 		Headers: resp.Headers,
 	}
 
-    // Pick which message type to use for decoding: success 2xx -> responseType, else errorResponseType if provided
-    selectedType := responseType
-    if resp.Status < 200 || resp.Status >= 300 {
-        if errorResponseType != "" {
-            selectedType = errorResponseType
-        }
-    }
+	// Pick which message type to use for decoding: success 2xx -> responseType, else errorResponseType if provided
+	selectedType := responseType
+	if resp.Status < 200 || resp.Status >= 300 {
+		if errorResponseType != "" {
+			selectedType = errorResponseType
+		}
+	}
 
-    // Try to decode protobuf response if specified
-    if selectedType != "" && s.isProtobufResponse(resp.ContentType) {
-        decoded, err := s.decodeProtobufResponse(selectedType, resp.Body)
-        if err != nil {
-            s.logger.Warn().Err(err).Msg("Failed to decode protobuf response, using raw")
-            result.Raw = string(resp.Body)
-            result.DecodeError = err.Error()
-        } else {
-            result.Decoded = decoded
-            // Heuristic: decoded to an empty structure though body had content → likely wrong type
-            trimmed := strings.TrimSpace(decoded)
-            if len(resp.Body) > 0 && (trimmed == "{}" || trimmed == "[]") {
-                result.DecodeError = "Decoded to an empty structure; the selected message type may be incorrect."
-            }
-        }
+	// Try to decode protobuf response if specified
+	if selectedType != "" && s.isProtobufResponse(resp.ContentType) {
+		decoded, err := s.decodeProtobufResponse(selectedType, resp.Body)
+		if err != nil {
+			s.logger.Warn().Err(err).Msg("Failed to decode protobuf response, using raw")
+			result.Raw = string(resp.Body)
+			result.DecodeError = err.Error()
+		} else {
+			result.Decoded = decoded
+			// Heuristic: decoded to an empty structure though body had content → likely wrong type
+			trimmed := strings.TrimSpace(decoded)
+			if len(resp.Body) > 0 && (trimmed == "{}" || trimmed == "[]") {
+				result.DecodeError = "Decoded to an empty structure; the selected message type may be incorrect."
+			}
+		}
 	} else {
 		// Use raw response
 		result.Raw = string(resp.Body)

@@ -169,9 +169,9 @@ export const runnerApi = {
 
 // Preferences API
 export const preferencesApi = {
-  get: (): Promise<{ confirmDeleteRequest: boolean }> =>
+  get: (): Promise<{ confirmDeleteRequest?: boolean; activeEnvironment?: string }> =>
     apiRequest('/api/preferences'),
-  update: (data: { confirmDeleteRequest?: boolean }): Promise<{ confirmDeleteRequest?: boolean }> =>
+  update: (data: { confirmDeleteRequest?: boolean; activeEnvironment?: string }): Promise<{ confirmDeleteRequest?: boolean; activeEnvironment?: string }> =>
     apiRequest('/api/preferences', {
       method: 'PUT',
       body: JSON.stringify(data),

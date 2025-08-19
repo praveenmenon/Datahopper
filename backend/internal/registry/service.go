@@ -1,14 +1,14 @@
 package registry
 
 import (
+	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
-	"context"
-	"crypto/sha256"
 
 	"github.com/jhump/protoreflect/desc"
 	"github.com/rs/zerolog"
@@ -230,7 +230,7 @@ func (s *Service) ListMessageTypes() ([]string, error) {
 			for _, msg := range messages {
 				fqn := fmt.Sprintf("%s.%s", packageName, msg.GetName())
 				messageTypes = append(messageTypes, fqn)
-				s.logger.Debug().Str("message", fqn).Msg("Found message type from desc")
+				s.logger.Trace().Str("message", fqn).Msg("Found message type from desc")
 			}
 		}
 	} else {
@@ -252,7 +252,7 @@ func (s *Service) ListMessageTypes() ([]string, error) {
 				msg := messages.Get(i)
 				fqn := fmt.Sprintf("%s.%s", packageName, msg.Name())
 				messageTypes = append(messageTypes, fqn)
-				s.logger.Debug().Str("message", fqn).Msg("Found message type")
+				s.logger.Trace().Str("message", fqn).Msg("Found message type")
 			}
 
 			return true
@@ -347,17 +347,17 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 		Str("method", "GetMessageFields").
 		Str("fqn", fqn).
 		Msg("GetMessageFields called")
-	
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-				// Search through descFiles (protoparse descriptors from virtual filesystem) for immediate fields
+	// Search through descFiles (protoparse descriptors from virtual filesystem) for immediate fields
 	if len(s.descFiles) > 0 {
 		s.logger.Info().
 			Int("descFileCount", len(s.descFiles)).
 			Str("searchingFor", fqn).
 			Msg("Searching for message in descFiles")
-		
+
 		for _, fd := range s.descFiles {
 			packageName := fd.GetPackage()
 			if packageName == "" {
@@ -368,7 +368,7 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 				Str("filePackage", packageName).
 				Int("messageCount", len(messages)).
 				Msg("Processing desc file")
-			
+
 			// Log all messages in this file for debugging
 			for _, msg := range messages {
 				msgFqn := fmt.Sprintf("%s.%s", packageName, msg.GetName())
@@ -380,7 +380,7 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 					Bool("matches", msgFqn == fqn).
 					Msg("Checking message in desc file")
 			}
-			
+
 			for _, msg := range messages {
 				msgFqn := fmt.Sprintf("%s.%s", packageName, msg.GetName())
 				s.logger.Debug().
@@ -388,7 +388,7 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 					Str("targetFqn", fqn).
 					Bool("matches", msgFqn == fqn).
 					Msg("Checking message FQN")
-				
+
 				if msgFqn == fqn {
 					s.logger.Info().
 						Str("fqn", fqn).
@@ -396,7 +396,7 @@ func (s *Service) GetMessageFields(fqn string) ([]map[string]interface{}, error)
 						Str("message", msg.GetName()).
 						Int("fieldCount", len(msg.GetFields())).
 						Msg("Found message in descFiles - using protoparse path")
-					
+
 					fields := make([]map[string]interface{}, 0)
 					for _, field := range msg.GetFields() {
 						fi := map[string]interface{}{
@@ -564,20 +564,20 @@ func (s *Service) GetComprehensiveMessageFields(fqn string) ([]map[string]interf
 // extractComprehensiveFields recursively extracts all fields including nested ones
 func (s *Service) extractComprehensiveFields(msg *desc.MessageDescriptor, prefix string, visited map[string]bool) ([]map[string]interface{}, error) {
 	fields := make([]map[string]interface{}, 0)
-	
+
 	// Prevent infinite recursion
 	msgFqn := msg.GetFullyQualifiedName()
 	if visited[msgFqn] {
 		return fields, nil
 	}
 	visited[msgFqn] = true
-	
+
 	for _, field := range msg.GetFields() {
 		fieldPath := field.GetName()
 		if prefix != "" {
 			fieldPath = prefix + "." + field.GetName()
 		}
-		
+
 		fieldInfo := map[string]interface{}{
 			"path":     fieldPath,
 			"name":     field.GetName(),
@@ -587,7 +587,7 @@ func (s *Service) extractComprehensiveFields(msg *desc.MessageDescriptor, prefix
 			"optional": field.IsRepeated() || field.GetType().String() == "message",
 			"message":  field.GetMessageType() != nil,
 		}
-		
+
 		// Enum metadata
 		if enumDesc := field.GetEnumType(); enumDesc != nil {
 			fieldInfo["enum"] = true
@@ -598,7 +598,7 @@ func (s *Service) extractComprehensiveFields(msg *desc.MessageDescriptor, prefix
 			}
 			fieldInfo["enumValues"] = enumNames
 		}
-		
+
 		// Add oneof information
 		if oneof := field.GetOneOf(); oneof != nil {
 			s.logger.Info().
@@ -610,11 +610,11 @@ func (s *Service) extractComprehensiveFields(msg *desc.MessageDescriptor, prefix
 			fieldInfo["oneof"] = true
 			fieldInfo["oneofName"] = oneof.GetName()
 		}
-		
+
 		// Add message type if it's a message field
 		if field.GetMessageType() != nil {
 			fieldInfo["messageType"] = field.GetMessageType().GetFullyQualifiedName()
-			
+
 			// Recursively get nested fields
 			if nestedFields, err := s.extractComprehensiveFields(field.GetMessageType(), fieldPath, visited); err == nil {
 				fields = append(fields, fieldInfo)
@@ -626,21 +626,21 @@ func (s *Service) extractComprehensiveFields(msg *desc.MessageDescriptor, prefix
 			fields = append(fields, fieldInfo)
 		}
 	}
-	
+
 	return fields, nil
 }
 
 // extractComprehensiveFieldsFromProtoreflect recursively extracts all fields including nested ones from protoreflect
 func (s *Service) extractComprehensiveFieldsFromProtoreflect(msg protoreflect.MessageDescriptor, prefix string, visited map[string]bool) ([]map[string]interface{}, error) {
 	fields := make([]map[string]interface{}, 0)
-	
+
 	// Prevent infinite recursion
 	msgFqn := string(msg.FullName())
 	if visited[msgFqn] {
 		return fields, nil
 	}
 	visited[msgFqn] = true
-	
+
 	msgFields := msg.Fields()
 	for i := 0; i < msgFields.Len(); i++ {
 		fd := msgFields.Get(i)
@@ -648,7 +648,7 @@ func (s *Service) extractComprehensiveFieldsFromProtoreflect(msg protoreflect.Me
 		if prefix != "" {
 			fieldPath = prefix + "." + string(fd.Name())
 		}
-		
+
 		fieldInfo := map[string]interface{}{
 			"path":     fieldPath,
 			"name":     string(fd.Name()),
@@ -658,7 +658,7 @@ func (s *Service) extractComprehensiveFieldsFromProtoreflect(msg protoreflect.Me
 			"optional": fd.HasPresence(),
 			"message":  fd.Message() != nil,
 		}
-		
+
 		// Enum metadata
 		if enumDesc := fd.Enum(); enumDesc != nil {
 			fieldInfo["enum"] = true
@@ -669,7 +669,7 @@ func (s *Service) extractComprehensiveFieldsFromProtoreflect(msg protoreflect.Me
 			}
 			fieldInfo["enumValues"] = enumNames
 		}
-		
+
 		// Add oneof information
 		if oneof := fd.ContainingOneof(); oneof != nil {
 			s.logger.Info().
@@ -682,11 +682,11 @@ func (s *Service) extractComprehensiveFieldsFromProtoreflect(msg protoreflect.Me
 			fieldInfo["oneof"] = true
 			fieldInfo["oneofName"] = string(oneof.Name())
 		}
-		
+
 		// Add message type if it's a message field
 		if fd.Message() != nil {
 			fieldInfo["messageType"] = string(fd.Message().FullName())
-			
+
 			// Recursively get nested fields
 			if nestedFields, err := s.extractComprehensiveFieldsFromProtoreflect(fd.Message(), fieldPath, visited); err == nil {
 				fields = append(fields, fieldInfo)
@@ -698,7 +698,7 @@ func (s *Service) extractComprehensiveFieldsFromProtoreflect(msg protoreflect.Me
 			fields = append(fields, fieldInfo)
 		}
 	}
-	
+
 	return fields, nil
 }
 
