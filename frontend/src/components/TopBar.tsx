@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Zap, Settings, Plus } from 'lucide-react';
 import { Environment, MessageType } from '../lib/types';
 import { useRegisterProto } from '../lib/useData';
+import { Dropdown } from './Dropdown';
 import { RegisterProtoModal } from './RegisterProtoModal';
 
 interface TopBarProps {
@@ -9,13 +10,15 @@ interface TopBarProps {
   activeEnvironment: string;
   onEnvironmentChange: (env: string) => void;
   messageTypes: MessageType[];
+  showEnvironmentSelector?: boolean;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
   environments,
   activeEnvironment,
   onEnvironmentChange,
-  messageTypes
+  messageTypes,
+  showEnvironmentSelector = true,
 }) => {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const registerProto = useRegisterProto();
@@ -41,26 +44,21 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           {/* Environment Selector */}
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <label htmlFor="environment" className="text-sm font-medium text-gray-700">
-                Environment:
-              </label>
-              <select
-                id="environment"
-                value={activeEnvironment || ''}
-                onChange={handleEnvironmentChange}
-                className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              >
-                {environments.length === 0 && (
-                  <option value="" disabled>(no environments)</option>
-                )}
-                {environments.map((env) => (
-                  <option key={env.name} value={env.name}>
-                    {env.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {showEnvironmentSelector && (
+              <div className="flex items-center space-x-2">
+                <label htmlFor="environment" className="text-sm font-medium text-gray-700">
+                  Environment:
+                </label>
+                <div className="w-48">
+                  <Dropdown
+                    options={environments.map((e) => ({ label: e.name, value: e.name }))}
+                    value={activeEnvironment || ''}
+                    onChange={(v) => onEnvironmentChange(v)}
+                    placeholder={environments.length === 0 ? '(no environments)' : 'Select environment'}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Register .proto Button */}
             <button

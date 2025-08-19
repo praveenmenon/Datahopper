@@ -11,6 +11,7 @@ import { useRunRequest } from '../lib/useData';
 import { protoApi, saveRequest as saveRequestApi } from '../lib/api';
 import { MessageSchemaMeta } from '../lib/types';
 import { useQueryClient } from 'react-query';
+import { Dropdown } from './Dropdown';
 
 interface RequestEditorProps {
   collection: Collection | null;
@@ -304,6 +305,20 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         }
       });
 
+      // Merge saved request body (if any) with in-editor changes so unchanged fields are also sent
+      let effectiveBody = body;
+      if (collection?.requests && requestId) {
+        const saved = collection.requests.find(r => r.id === requestId);
+        if (saved && Array.isArray(saved.body)) {
+          const merged: Record<string, any> = {};
+          // seed with saved
+          saved.body.forEach((b) => { if (b.path) merged[b.path] = b.value; });
+          // overlay edits
+          body.forEach((b) => { if (b.path) merged[b.path] = b.value; });
+          effectiveBody = Object.entries(merged).map(([path, value]) => ({ path, value }));
+        }
+      }
+
       const requestData: RunRequest = {
         method,
         url,
@@ -311,10 +326,12 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         responseType: responseType || undefined,
         errorResponseType: errorResponseType || undefined,
         headers: headersMap,
-        body,
+        body: effectiveBody,
         timeoutSeconds,
         variables
       } as any;
+
+      try { console.log('Sending body fields:', effectiveBody); } catch {}
       // Attach identifiers for backend persistence when available
       (requestData as any).collectionId = collection?.id || undefined;
       (requestData as any).requestId = requestId || undefined;
@@ -326,13 +343,9 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         try { localStorage.setItem(`requestResp:${requestId}`, JSON.stringify(resp)); } catch {}
       }
       onRequestRun(resp);
-      // Refresh server state so saved requests include updated lastResponse (only for saved requests)
-      try {
-        if (collection?.id && requestId) {
-          queryClient.invalidateQueries('collections');
-          queryClient.invalidateQueries(['collection', collection.id]);
-        }
-      } catch {}
+      // Do NOT invalidate collections here; refetch would rehydrate editor from saved
+      // request and overwrite unsaved in-editor changes (e.g., firstName).
+      // Collections will refresh on explicit save or navigation.
     } catch (error) {
       console.error('Failed to run request:', error);
       setError(error instanceof Error ? error.message : 'Request failed');
@@ -414,15 +427,13 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           />
 
           {/* Method Selector */}
-          <select
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-            className="border border-gray-300 rounded-md px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          >
-            {['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
+          <div className="w-28">
+            <Dropdown
+              options={['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].map(m => ({ label: m, value: m }))}
+              value={method}
+              onChange={setMethod}
+            />
+          </div>
 
           {/* URL Input */}
           <div className="flex-1">
@@ -481,46 +492,37 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Request Message Type
                 </label>
-                <select
+                <Dropdown
+                  options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
                   value={protoMessage}
-                  onChange={(e) => setProtoMessage(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  <option value="">Select message type</option>
-                  {messageTypes.map((msg, index) => (
-                    <option key={index} value={msg.fqName}>{msg.fqName}</option>
-                  ))}
-                </select>
+                  onChange={setProtoMessage}
+                  placeholder="Select message type"
+                  className="w-full"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Success Response Message Type
                 </label>
-                <select
+                <Dropdown
+                  options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
                   value={responseType}
-                  onChange={(e) => setResponseType(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  <option value="">Select message type</option>
-                  {messageTypes.map((msg, index) => (
-                    <option key={index} value={msg.fqName}>{msg.fqName}</option>
-                  ))}
-                </select>
+                  onChange={setResponseType}
+                  placeholder="Select message type"
+                  className="w-full"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Error Response Message Type
                 </label>
-                <select
+                <Dropdown
+                  options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
                   value={errorResponseType}
-                  onChange={(e) => setErrorResponseType(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  <option value="">Select message type</option>
-                  {messageTypes.map((msg, index) => (
-                    <option key={index} value={msg.fqName}>{msg.fqName}</option>
-                  ))}
-                </select>
+                  onChange={setErrorResponseType}
+                  placeholder="Select message type"
+                  className="w-full"
+                />
               </div>
             </div>
           </div>

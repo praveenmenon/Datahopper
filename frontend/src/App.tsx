@@ -3,12 +3,14 @@ import { TopBar } from './components/TopBar';
 import { Sidebar } from './components/Sidebar';
 import { RequestEditor } from './components/RequestEditor';
 import { useCollections, useEnvironments, useMessageTypes } from './lib/useData';
+import { preferencesApi } from './lib/api';
 import { Collection } from './lib/types';
 
 function App() {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<string | null>(null);
   const [activeEnvironment, setActiveEnvironment] = useState<string>('');
+  const [hasRestoredEnv, setHasRestoredEnv] = useState<boolean>(false);
 
   // Data fetching
   const { data: collections = [], isLoading: collectionsLoading } = useCollections();
@@ -17,38 +19,60 @@ function App() {
 
   const currentEnvironment = environments.find(env => env.name === activeEnvironment);
 
-  // Restore previously selected environment on first load
+  // Restore previously selected environment on first load (backend pref first, then local)
   useEffect(() => {
-    const stored = localStorage.getItem('activeEnvironment');
-    if (stored && !environmentsLoading && environments.length > 0) {
-      // Only restore if the environment exists in the loaded environments
-      if (environments.find(e => e.name === stored)) {
-        setActiveEnvironment(stored);
+    (async () => {
+      // Prefer backend preference when available; fallback to localStorage
+      try {
+        const pref = await preferencesApi.get();
+        const fromBackend = pref?.activeEnvironment;
+        const candidate = fromBackend || localStorage.getItem('activeEnvironment') || '';
+        if (candidate && !environmentsLoading && environments.length > 0) {
+          if (environments.find(e => e.name === candidate)) {
+            setActiveEnvironment(candidate);
+          }
+        }
+      } catch {
+        const stored = localStorage.getItem('activeEnvironment');
+        if (stored && !environmentsLoading && environments.length > 0) {
+          if (environments.find(e => e.name === stored)) {
+            setActiveEnvironment(stored);
+          }
+        }
       }
-    }
+      // Mark restore complete so downstream effects can run safely
+      setHasRestoredEnv(true);
+    })();
   }, [environmentsLoading, environments]);
 
-  // Persist active environment selection
+  // Persist active environment selection (only after initial restore completes)
   useEffect(() => {
+    if (!hasRestoredEnv) return;
     if (activeEnvironment) {
       localStorage.setItem('activeEnvironment', activeEnvironment);
+      // Best-effort sync to backend
+      try { preferencesApi.update({ activeEnvironment }); } catch {}
     } else {
       localStorage.removeItem('activeEnvironment');
+      try { preferencesApi.update({ activeEnvironment: '' }); } catch {}
     }
-  }, [activeEnvironment]);
+  }, [activeEnvironment, hasRestoredEnv]);
 
-  // If the stored/active environment no longer exists, clear it
+  // If the stored/active environment no longer exists, clear it.
+  // After restore finishes, if nothing is set, default to first environment.
   useEffect(() => {
     if (!environmentsLoading) {
       if (activeEnvironment && !environments.find(e => e.name === activeEnvironment)) {
         setActiveEnvironment('');
       }
       // If no environment is selected and there are environments available, select the first one
-      if (!activeEnvironment && environments.length > 0) {
-        setActiveEnvironment(environments[0].name);
+      if (hasRestoredEnv && !activeEnvironment && environments.length > 0) {
+        const first = environments[0].name;
+        setActiveEnvironment(first);
+        try { preferencesApi.update({ activeEnvironment: first }); } catch {}
       }
     }
-  }, [environmentsLoading, environments, activeEnvironment]);
+  }, [environmentsLoading, environments, activeEnvironment, hasRestoredEnv]);
 
   // Keep selected collection reference in sync with refreshed query data
   useEffect(() => {
@@ -91,8 +115,10 @@ function App() {
         onEnvironmentChange={(name) => {
           setActiveEnvironment(name);
           if (name) localStorage.setItem('activeEnvironment', name);
+          try { preferencesApi.update({ activeEnvironment: name }); } catch {}
         }}
         messageTypes={messageTypes}
+        showEnvironmentSelector={hasRestoredEnv}
       />
       
       <div className="flex h-screen pt-16">
