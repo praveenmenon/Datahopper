@@ -38,7 +38,6 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [timeoutSeconds, setTimeoutSeconds] = useState(30);
   const [headers, setHeaders] = useState<HeaderKV[]>([]);
   const [body, setBody] = useState<BodyField[]>([]);
-  const [resolvedUrl, setResolvedUrl] = useState('');
   const [response, setResponse] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -269,17 +268,16 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     }
   };
 
-  // Update resolved URL when variables change (env overrides collection)
-  useEffect(() => {
+  // Compute resolved URL inline when needed (env overrides collection)
+  const resolvedUrl = React.useMemo(() => {
     let resolved = url || '';
     const merged: Record<string, string> = {};
     if (collection?.variables) Object.assign(merged, collection.variables);
     if (environment?.variables) Object.assign(merged, environment.variables);
-    
     Object.entries(merged).forEach(([k, v]) => {
       resolved = resolved.replace(new RegExp(`{{${k}}}`, 'g'), v);
     });
-    setResolvedUrl(resolved);
+    return resolved;
   }, [url, environment, collection]);
 
   const handleSend = async () => {
@@ -445,6 +443,26 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
                 options={['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].map(m => ({ label: m, value: m }))}
                 value={method}
                 onChange={setMethod}
+                labelClassName={
+                  method === 'GET' ? 'text-green-600 dark:text-green-400' :
+                  method === 'POST' ? 'text-blue-600 dark:text-blue-400' :
+                  method === 'PUT' ? 'text-amber-600 dark:text-amber-400' :
+                  method === 'PATCH' ? 'text-yellow-600 dark:text-yellow-400' :
+                  method === 'DELETE' ? 'text-red-600 dark:text-red-400' :
+                  method === 'HEAD' ? 'text-purple-600 dark:text-purple-400' :
+                  method === 'OPTIONS' ? 'text-cyan-600 dark:text-cyan-400' :
+                  undefined
+                }
+                itemClassNameFn={(opt) => (
+                  opt.value === 'GET' ? 'text-green-600 dark:text-green-400' :
+                  opt.value === 'POST' ? 'text-blue-600 dark:text-blue-400' :
+                  opt.value === 'PUT' ? 'text-amber-600 dark:text-amber-400' :
+                  opt.value === 'PATCH' ? 'text-yellow-600 dark:text-yellow-400' :
+                  opt.value === 'DELETE' ? 'text-red-600 dark:text-red-400' :
+                  opt.value === 'HEAD' ? 'text-purple-600 dark:text-purple-400' :
+                  opt.value === 'OPTIONS' ? 'text-cyan-600 dark:text-cyan-400' :
+                  'text-gray-700 dark:text-gray-200'
+                )}
               />
             </div>
             <div className="flex-1">
@@ -456,6 +474,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
                   ...(collection?.variables || {}),
                   ...(environment?.variables || {}),
                 }}
+                showExplainButton
               />
             </div>
             <button
@@ -467,16 +486,6 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
               {runRequest.isLoading ? 'Sending...' : 'Send'}
             </button>
           </div>
-
-          {/* Resolved URL Preview */}
-          {resolvedUrl !== url && (
-            <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-300">
-              <Eye className="h-4 w-4" />
-              <span className="font-mono bg-gray-100 dark:bg-gray-700 dark:text-gray-100 px-2 py-1 rounded">
-                {resolvedUrl}
-              </span>
-            </div>
-          )}
         </div>
       </div>
 

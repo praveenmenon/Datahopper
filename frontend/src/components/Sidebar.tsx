@@ -224,7 +224,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             <div className="flex items-center space-x-2 flex-1">
                               <FileText className="h-3 w-3 text-gray-400" />
                               <span className="text-sm truncate">{request.name}</span>
-                              <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded bg-gray-50 dark:bg-gray-700/40 ${
+                                  request.method === 'GET' ? 'text-green-600 dark:text-green-400' :
+                                  request.method === 'POST' ? 'text-blue-600 dark:text-blue-400' :
+                                  request.method === 'PUT' ? 'text-amber-600 dark:text-amber-400' :
+                                  request.method === 'PATCH' ? 'text-yellow-600 dark:text-yellow-400' :
+                                  request.method === 'DELETE' ? 'text-red-600 dark:text-red-400' :
+                                  request.method === 'HEAD' ? 'text-purple-600 dark:text-purple-400' :
+                                  request.method === 'OPTIONS' ? 'text-cyan-600 dark:text-cyan-400' :
+                                  'text-gray-500 dark:text-gray-300'
+                                }`}
+                              >
                                 {request.method}
                               </span>
                             </div>

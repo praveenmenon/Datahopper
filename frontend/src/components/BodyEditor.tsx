@@ -79,7 +79,7 @@ export const BodyEditor: React.FC<BodyEditorProps> = ({
       </div>
 
       {body.length === 0 ? (
-        <div className="text-center py-4 text-gray-500 text-sm">
+        <div className="text-center py-4 text-gray-500 dark:text-gray-300 text-sm">
           <p>No body fields defined</p>
           <p className="text-xs">Add fields to build your protobuf request body</p>
         </div>
@@ -103,7 +103,7 @@ export const BodyEditor: React.FC<BodyEditorProps> = ({
               />
               <button
                 onClick={() => removeField(index)}
-                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                 title="Remove field"
               >
                 <Trash2 className="h-4 w-4" />
@@ -114,22 +114,22 @@ export const BodyEditor: React.FC<BodyEditorProps> = ({
       )}
 
       {/* Path Examples */}
-      <div className="bg-gray-50 rounded-md p-3">
+      <div className="bg-gray-50 dark:bg-gray-700/40 border border-gray-200 dark:border-gray-600 rounded-md p-3">
         <div className="flex items-center space-x-2 mb-2">
-          <Info className="h-4 w-4 text-gray-500" />
-          <span className="text-sm font-medium text-gray-700">Path Examples</span>
+          <Info className="h-4 w-4 text-gray-500 dark:text-gray-300" />
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Path Examples</span>
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs">
           {getPathExamples().map((example, index) => (
             <code
               key={index}
-              className="bg-white px-2 py-1 rounded border text-gray-600 font-mono"
+              className="bg-white dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-200 font-mono"
             >
               {example}
             </code>
           ))}
         </div>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-gray-500 dark:text-gray-300 mt-2">
           Use dot notation for nested fields and [index] for repeated fields. Values support {'{variable}'} interpolation.
         </p>
       </div>
