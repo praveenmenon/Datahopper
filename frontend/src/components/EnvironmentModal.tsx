@@ -65,10 +65,10 @@ export const EnvironmentModal: React.FC<EnvironmentModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             {mode === 'create' ? 'Create Environment' : `Edit Environment`}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -80,7 +80,7 @@ export const EnvironmentModal: React.FC<EnvironmentModalProps> = ({
         <div className="p-5 space-y-4">
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
             <input
               type="text"
               value={name}
@@ -93,7 +93,7 @@ export const EnvironmentModal: React.FC<EnvironmentModalProps> = ({
           {/* Variables */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">Variables</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Variables</label>
               <button
                 onClick={addRow}
                 className="inline-flex items-center text-xs text-primary-600 hover:text-primary-700"
@@ -135,7 +135,7 @@ export const EnvironmentModal: React.FC<EnvironmentModalProps> = ({
         <div className="p-5 border-t border-gray-200 flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50"
+            className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/40"
           >
             Cancel
           </button>

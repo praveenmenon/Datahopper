@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Save, Eye } from 'lucide-react';
+import { Play, Save, Eye, Code2, List } from 'lucide-react';
+import clsx from 'clsx';
 import { Collection, Environment, MessageType, BodyField, HeaderKV, MessageField, RunRequest } from '../lib/types';
 import { BodyEditor } from './BodyEditor';
 import { VariableAwareInput } from './VariableAwareInput';
@@ -43,6 +44,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [messageFields, setMessageFields] = useState<MessageField[]>([]);
   const [schema, setSchema] = useState<MessageSchemaMeta | null>(null);
+  const [activeLeftTab, setActiveLeftTab] = useState<'proto' | 'headers'>('proto');
 
   const runRequest = useRunRequest();
   const queryClient = useQueryClient();
@@ -403,8 +405,8 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
 
   if (!collection) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <div className="text-center text-gray-500">
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center text-gray-500 dark:text-gray-300">
           <p className="text-lg">Select a collection to get started</p>
           <p className="text-sm">Or create a new collection to begin</p>
         </div>
@@ -413,9 +415,9 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-white">
+    <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 dark:text-white">
       {/* Request Header */}
-      <div className="border-b border-gray-200 p-4">
+      <div className="border-b border-gray-200 dark:border-gray-700 p-4 pb-[9px] relative z-0">
         <div className="flex items-center space-x-4">
           {/* Request Name */}
           <input
@@ -450,9 +452,9 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
 
           {/* Resolved URL Preview */}
           {resolvedUrl !== url && (
-            <div className="flex items-center space-x-2 text-xs text-gray-500">
+            <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-300">
               <Eye className="h-4 w-4" />
-              <span className="font-mono bg-gray-100 px-2 py-1 rounded">
+              <span className="font-mono bg-gray-100 dark:bg-gray-700 dark:text-gray-100 px-2 py-1 rounded">
                 {resolvedUrl}
               </span>
             </div>
@@ -463,7 +465,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
             <button
               onClick={handleSave}
               disabled={!collection}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors disabled:opacity-50"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors disabled:opacity-50"
             >
               <Save className="h-4 w-4 mr-2" />
               {'Save'}
@@ -481,63 +483,95 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
       </div>
 
       {/* Request Configuration */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Headers, Body, etc. */}
-        <div className="flex-1 flex flex-col border-r border-gray-200">
-          {/* Protobuf Configuration */}
-          <div className="border-b border-gray-200 p-4">
-            <h3 className="text-sm font-medium text-gray-900 mb-3">Protobuf Configuration</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Request Message Type
-                </label>
-                <Dropdown
-                  options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
-                  value={protoMessage}
-                  onChange={setProtoMessage}
-                  placeholder="Select message type"
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Success Response Message Type
-                </label>
-                <Dropdown
-                  options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
-                  value={responseType}
-                  onChange={setResponseType}
-                  placeholder="Select message type"
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Error Response Message Type
-                </label>
-                <Dropdown
-                  options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
-                  value={errorResponseType}
-                  onChange={setErrorResponseType}
-                  placeholder="Select message type"
-                  className="w-full"
-                />
-              </div>
-            </div>
+      <div className="flex-1 flex overflow-visible">
+        {/* Left Panel - Tabs (Proto / Headers) and Body */}
+        <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-gray-700">
+          {/* Tabs */}
+          <div className="px-4 pt-2 mt-3 border-b border-gray-200 dark:border-gray-700">
+            <nav className="flex space-x-6">
+              <button
+                type="button"
+                onClick={() => setActiveLeftTab('proto')}
+                className={clsx(
+                  'pb-3 inline-flex items-center text-sm font-medium border-b-2',
+                  activeLeftTab === 'proto'
+                    ? 'border-primary-600 text-primary-600 dark:text-white'
+                    : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
+                )}
+              >
+                <Code2 className="h-4 w-4 mr-2" /> Protobuf Configuration
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveLeftTab('headers')}
+                className={clsx(
+                  'pb-3 inline-flex items-center text-sm font-medium border-b-2',
+                  activeLeftTab === 'headers'
+                    ? 'border-primary-600 text-primary-600 dark:text-white'
+                    : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
+                )}
+              >
+                <List className="h-4 w-4 mr-2" /> Headers
+              </button>
+            </nav>
           </div>
 
-          {/* Headers */}
-          <div className="p-4">
-            <HeadersEditor headers={headers} onChange={setHeaders} variables={{
-              ...(collection?.variables || {}),
-              ...(environment?.variables || {}),
-            }} />
+          {/* Tab content */}
+          <div className="px-4 py-3">
+            {activeLeftTab === 'proto' ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Request Message Type
+                  </label>
+                  <Dropdown
+                    options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
+                    value={protoMessage}
+                    onChange={setProtoMessage}
+                    placeholder="Select message type"
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Success Response Message Type
+                  </label>
+                  <Dropdown
+                    options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
+                    value={responseType}
+                    onChange={setResponseType}
+                    placeholder="Select message type"
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Error Response Message Type
+                  </label>
+                  <Dropdown
+                    options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
+                    value={errorResponseType}
+                    onChange={setErrorResponseType}
+                    placeholder="Select message type"
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            ) : (
+              <HeadersEditor
+                headers={headers}
+                onChange={setHeaders}
+                variables={{
+                  ...(collection?.variables || {}),
+                  ...(environment?.variables || {}),
+                }}
+              />
+            )}
           </div>
 
           {/* Body */}
           {(method !== 'GET' || protoMessage) && (
-            <div className="p-4 border-t border-gray-200">
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
               {messageFields && messageFields.length > 0 ? (
                 <NestedBodyEditor
                   fields={messageFields}
@@ -561,7 +595,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         </div>
 
         {/* Right Panel - Variables/Preview */}
-        <div className="w-80 p-4 bg-gray-50">
+        <div className="w-80 p-4 bg-gray-50 dark:bg-gray-900 dark:text-white">
           <VariablesPreview 
             collection={collection}
             environment={environment}
@@ -579,7 +613,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
       </div>
 
       {/* Response Panel */}
-      <div className="border-t border-gray-200 h-96">
+      <div className="border-t border-gray-200 dark:border-gray-700 mt-2">
         <ResponsePanel
           response={response}
           isLoading={isLoading}

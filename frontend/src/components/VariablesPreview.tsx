@@ -77,12 +77,12 @@ export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
   };
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-sm font-medium text-gray-900">Variables Preview</h3>
+    <div className="space-y-4 text-gray-900 dark:text-white">
+      <h3 className="text-sm font-medium text-gray-900 dark:text-white">Variables Preview</h3>
       
       {/* Available Variables */}
       <div>
-        <h4 className="text-xs font-medium text-gray-700 mb-2">Available Variables</h4>
+        <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Available Variables</h4>
         {Object.keys(variables).length === 0 ? (
           <p className="text-xs text-gray-500">No variables defined</p>
         ) : (
@@ -101,26 +101,26 @@ export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
 
       {/* URL Preview */}
       <div>
-        <h4 className="text-xs font-medium text-gray-700 mb-2 flex items-center">
+        <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center">
           <Eye className="h-3 w-3 mr-1" />
           Resolved URL
         </h4>
         {url ? (
           <div className="space-y-1">
-            <div className="text-xs text-gray-500">Template:</div>
-            <code className="block text-xs bg-gray-100 p-2 rounded font-mono break-all">
+            <div className="text-xs text-gray-500 dark:text-gray-400">Template:</div>
+            <code className="block text-xs bg-gray-100 dark:bg-gray-700 dark:text-gray-100 p-2 rounded font-mono break-all">
               {url}
             </code>
-            <div className="text-xs text-gray-500">Resolved:</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">Resolved:</div>
             <code className={`block text-xs p-2 rounded font-mono break-all ${
               hasUnresolvedVariables(resolvedUrl) 
-                ? 'bg-yellow-100 text-yellow-800' 
-                : 'bg-green-100 text-green-800'
+                ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200' 
+                : 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
             }`}>
               {resolvedUrl || 'No URL specified'}
             </code>
             {hasUnresolvedVariables(resolvedUrl) && (
-              <div className="flex items-center text-xs text-yellow-600">
+              <div className="flex items-center text-xs text-yellow-600 dark:text-yellow-300">
                 <AlertCircle className="h-3 w-3 mr-1" />
                 Contains unresolved variables
               </div>
@@ -134,20 +134,20 @@ export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
       {/* Headers Preview */}
       {headers.length > 0 && (
         <div>
-          <h4 className="text-xs font-medium text-gray-700 mb-2">Resolved Headers</h4>
+          <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Resolved Headers</h4>
           <div className="space-y-1">
             {resolvedHeaders.map((header, index) => (
               <div key={index} className="text-xs">
                 <div className="flex justify-between">
                   <span className="font-medium">{header.key || 'Unnamed'}</span>
                   {hasUnresolvedVariables(header.resolvedValue) && (
-                    <span className="text-yellow-600 text-xs">Unresolved</span>
+                    <span className="text-yellow-600 dark:text-yellow-300 text-xs">Unresolved</span>
                   )}
                 </div>
                 <code className={`block text-xs p-1 rounded font-mono break-all ${
                   hasUnresolvedVariables(header.resolvedValue) 
-                    ? 'bg-yellow-100 text-yellow-800' 
-                    : 'bg-green-100 text-green-800'
+                    ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200' 
+                    : 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
                 }`}>
                   {header.resolvedValue || '(empty)'}
                 </code>
@@ -160,20 +160,20 @@ export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
       {/* Body Preview (optional) */}
       {showResolvedBody && body.length > 0 && (
         <div>
-          <h4 className="text-xs font-medium text-gray-700 mb-2">Resolved Body</h4>
+          <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Resolved Body</h4>
           <div className="space-y-1">
             {resolvedBody.map((field, index) => (
               <div key={index} className="text-xs">
                 <div className="flex justify-between">
                   <span className="font-mono">{field.path || 'Unnamed'}</span>
                   {hasUnresolvedVariables(field.resolvedValue) && (
-                    <span className="text-yellow-600 text-xs">Unresolved</span>
+                    <span className="text-yellow-600 dark:text-yellow-300 text-xs">Unresolved</span>
                   )}
                 </div>
                 <code className={`block text-xs p-1 rounded font-mono break-all ${
                   hasUnresolvedVariables(field.resolvedValue) 
-                    ? 'bg-yellow-100 text-yellow-800' 
-                    : 'bg-green-100 text-green-800'
+                    ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200' 
+                    : 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
                 }`}>
                   {field.resolvedValue || '(empty)'}
                 </code>
@@ -184,9 +184,9 @@ export const VariablesPreview: React.FC<VariablesPreviewProps> = ({
       )}
 
       {/* Variable Precedence Info */}
-      <div className="bg-blue-50 rounded-md p-3">
-        <h4 className="text-xs font-medium text-blue-700 mb-1">Variable Precedence</h4>
-        <div className="text-xs text-blue-600 space-y-1">
+      <div className="bg-blue-50 dark:bg-blue-900 rounded-md p-3">
+        <h4 className="text-xs font-medium text-blue-700 dark:text-blue-200 mb-1">Variable Precedence</h4>
+        <div className="text-xs text-blue-600 dark:text-blue-300 space-y-1">
           <p>1. Environment variables (highest priority)</p>
           <p>2. Collection variables (base values)</p>
           <p>3. No variables (fallback)</p>

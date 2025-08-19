@@ -4,6 +4,8 @@ import { Environment, MessageType } from '../lib/types';
 import { useRegisterProto } from '../lib/useData';
 import { Dropdown } from './Dropdown';
 import { RegisterProtoModal } from './RegisterProtoModal';
+import { SettingsModal } from './SettingsModal';
+import { type ThemeMode, setTheme as persistTheme, getStoredTheme, getSystemPrefersDark } from '../lib/theme';
 
 interface TopBarProps {
   environments: Environment[];
@@ -21,21 +23,28 @@ export const TopBar: React.FC<TopBarProps> = ({
   showEnvironmentSelector = true,
 }) => {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [theme, setThemeState] = useState<ThemeMode>(() => getStoredTheme() ?? 'system');
+
+  const applyTheme = (t: ThemeMode) => {
+    setThemeState(t);
+    persistTheme(t);
+  };
   const registerProto = useRegisterProto();
 
   // Note: native select removed; using Dropdown component instead
 
   return (
     <>
-      <header className="bg-white border-b border-gray-200 px-6 py-4 fixed top-0 left-0 right-0 z-10">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 fixed top-0 left-0 right-0 z-50 text-gray-900 dark:text-white">
         <div className="flex items-center justify-between">
           {/* Brand */}
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-2">
               <Zap className="h-8 w-8 text-primary-600" />
-              <h1 className="text-2xl font-bold text-gray-900">DataHopper</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">DataHopper</h1>
             </div>
-            <span className="text-sm text-gray-500 font-medium">
+            <span className="text-sm text-gray-500 dark:text-gray-300 font-medium">
               Hop between APIs with protobuf speed
             </span>
           </div>
@@ -44,7 +53,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div className="flex items-center space-x-4">
             {showEnvironmentSelector && (
               <div className="flex items-center space-x-2">
-                <label htmlFor="environment" className="text-sm font-medium text-gray-700">
+                <label htmlFor="environment" className="text-sm font-medium text-gray-700 dark:text-gray-200">
                   Environment:
                 </label>
                 <div className="w-48">
@@ -68,7 +77,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             </button>
 
             {/* Settings Button */}
-            <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+            <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors" onClick={() => setShowSettings(true)}>
               <Settings className="h-5 w-5" />
             </button>
           </div>
@@ -83,7 +92,12 @@ export const TopBar: React.FC<TopBarProps> = ({
         isLoading={registerProto.isLoading}
         messageTypes={messageTypes}
       />
-
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        theme={theme}
+        onThemeChange={applyTheme}
+      />
     </>
   );
 };

@@ -45,7 +45,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
         disabled={disabled}
         onClick={() => setOpen(o => !o)}
         className={clsx(
-          'w-full border border-gray-300 rounded-md px-3 py-2 text-left text-sm bg-white',
+          'w-full border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 text-left text-sm bg-white dark:bg-gray-800 dark:text-white',
           'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent',
           disabled && 'opacity-50 cursor-not-allowed'
         )}
@@ -58,15 +58,17 @@ export const Dropdown: React.FC<DropdownProps> = ({
         </span>
       </button>
       {open && (
-        <div className="absolute z-20 mt-1 w-full bg-white shadow-lg ring-1 ring-black ring-opacity-5 rounded-md max-h-60 overflow-auto">
+        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 dark:text-white shadow-lg ring-1 ring-black ring-opacity-5 rounded-md max-h-60 overflow-auto">
           <ul className="py-1 text-sm">
             {options.map(opt => (
               <li key={opt.value}>
                 <button
                   type="button"
                   className={clsx(
-                    'w-full text-left px-3 py-2 hover:bg-gray-100',
-                    value === opt.value ? 'text-primary-700 font-medium' : 'text-gray-700',
+                    'w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:!bg-primary-900/40',
+                    value === opt.value
+                      ? 'text-primary-700 dark:text-primary-300 font-medium bg-primary-50 dark:bg-primary-900/40'
+                      : 'text-gray-700 dark:text-gray-200',
                     itemClassName
                   )}
                   onClick={() => {

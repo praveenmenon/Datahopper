@@ -15,11 +15,23 @@
     --color-primary-800: #1e40af;
     --color-primary-900: #1e3a8a;
   }
+  .dark {
+    --color-primary-50: #0b1220;
+    --color-primary-100: #0f172a; /* slate-900 */
+    --color-primary-200: #111827; /* gray-900 */
+    --color-primary-300: #1f2937; /* gray-800 */
+    --color-primary-400: #334155; /* slate-700 */
+    --color-primary-500: #06b6d4; /* accent cyan-500 */
+    --color-primary-600: #0ea5e9; /* sky-500 */
+    --color-primary-700: #22d3ee; /* cyan-400 */
+    --color-primary-800: #38bdf8; /* sky-400 */
+    --color-primary-900: #a5b4fc; /* indigo-300 */
+  }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500;
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:focus:ring-offset-gray-800;
   }
   
   .btn-secondary {
@@ -33,4 +45,16 @@
   .card {
     @apply bg-white rounded-lg shadow-sm border border-gray-200;
   }
+
+  /* Dark mode UI polish */
+  /* Root backgrounds */
+  html, body, #root { @apply bg-gray-50; }
+  .dark html, .dark body, .dark #root { @apply bg-gray-800; }
+  body { @apply bg-transparent; }
+  .dark body { @apply bg-transparent text-white; }
+  .dark .card { @apply bg-gray-800 border-gray-700 text-white; }
+  .dark .btn-secondary { @apply bg-gray-800 border-gray-700 text-white hover:bg-gray-700; }
+  .dark input,
+  .dark select,
+  .dark textarea { @apply bg-gray-800 border-gray-700 text-white placeholder-gray-400; }
 }

@@ -59,7 +59,7 @@ export const HeadersEditor: React.FC<HeadersEditorProps> = ({ headers, onChange,
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900">Headers</h3>
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Headers</h3>
         <div className="flex space-x-2">
           <button
             onClick={removeEmptyHeaders}
@@ -85,24 +85,24 @@ export const HeadersEditor: React.FC<HeadersEditorProps> = ({ headers, onChange,
       ) : (
         <div className="space-y-2">
           {headers.map((header, index) => (
-            <div key={index} className="grid grid-cols-3 gap-4 items-center">
+            <div key={index} className="grid grid-cols-12 gap-4 items-center">
               <HeaderKeyInput
                 value={header.key}
                 onChange={(val) => updateHeader(index, 'key', val)}
                 suggestions={COMMON_HEADER_KEYS}
                 placeholder="Header name (e.g., Authorization)"
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                containerClassName="w-full"
+                containerClassName="col-span-3 w-full"
               />
               <VariableAwareInput
                 value={header.value}
                 onChange={(e) => updateHeader(index, 'value', (e.target as HTMLInputElement).value)}
                 placeholder="Header value (supports {{variables}})"
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                containerClassName="w-full"
+                containerClassName="col-span-8 w-full"
                 variables={variables || {}}
               />
-              <div className="flex justify-end">
+              <div className="col-span-1 flex justify-end">
                 <button
                   onClick={() => removeHeader(index)}
                   className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"

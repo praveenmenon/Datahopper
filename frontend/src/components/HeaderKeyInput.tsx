@@ -102,7 +102,7 @@ export const HeaderKeyInput: React.FC<HeaderKeyInputProps> = ({
         <div
           id="header-key-suggestions-popup"
           role="listbox"
-          className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg"
+          className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg"
         >
           {filtered.map((s, i) => (
             <div
@@ -112,7 +112,7 @@ export const HeaderKeyInput: React.FC<HeaderKeyInputProps> = ({
               onMouseEnter={() => setHighlightIndex(i)}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => commit(s)}
-              className={`px-3 py-2 text-sm cursor-pointer ${highlightIndex === i ? 'bg-primary-50 text-primary-700' : 'hover:bg-gray-50'}`}
+              className={`px-3 py-2 text-sm cursor-pointer ${highlightIndex === i ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-200' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'}`}
             >
               {s}
             </div>
