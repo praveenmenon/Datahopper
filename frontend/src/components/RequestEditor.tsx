@@ -44,6 +44,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [messageFields, setMessageFields] = useState<MessageField[]>([]);
   const [schema, setSchema] = useState<MessageSchemaMeta | null>(null);
   const [activeLeftTab, setActiveLeftTab] = useState<'proto' | 'headers'>('proto');
+  const [showVariables, setShowVariables] = useState<boolean>(true);
 
   const runRequest = useRunRequest();
   const queryClient = useQueryClient();
@@ -485,12 +486,20 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
               <Play className="h-4 w-4 mr-2" />
               {runRequest.isLoading ? 'Sending...' : 'Send'}
             </button>
+            <button
+              type="button"
+              onClick={() => setShowVariables(v => !v)}
+              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/40 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              title="Toggle Variables Preview"
+            >
+              Variables
+            </button>
           </div>
         </div>
       </div>
 
       {/* Request Configuration */}
-      <div className="flex-1 flex overflow-visible">
+      <div className="relative flex-1 flex overflow-visible">
         {/* Left Panel - Tabs (Proto / Headers) and Body */}
         <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-gray-700">
           {/* Tabs */}
@@ -601,22 +610,43 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           )}
         </div>
 
-        {/* Right Panel - Variables/Preview */}
-        <div className="w-80 p-4 bg-gray-50 dark:bg-gray-900 dark:text-white">
-          <VariablesPreview 
-            collection={collection}
-            environment={environment}
-            url={url}
-            headers={headers}
-            body={body}
-            showResolvedBody={false}
-            variablesOverride={(environment?.variables || collection?.variables) ? {
-              ...(collection?.variables || {}),
-              ...(environment?.variables || {}),
-            } : undefined}
-          />
-        </div>
-
+        {/* Variables Preview Drawer - pushes content by occupying width */}
+        <aside
+          className={clsx(
+            'overflow-hidden transition-all duration-300 bg-gray-50 dark:bg-gray-900 dark:text-white border-l border-gray-200 dark:border-gray-700',
+            showVariables ? 'w-80' : 'w-0'
+          )}
+          aria-label="Variables preview drawer"
+        >
+          {showVariables && (
+            <div className="h-full flex flex-col">
+              <div className="p-4 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-sm font-medium">Variables Preview</h2>
+                <button
+                  type="button"
+                  className="px-2 py-1 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                  onClick={() => setShowVariables(false)}
+                >
+                  Close
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto flex-1">
+                <VariablesPreview
+                  collection={collection}
+                  environment={environment}
+                  url={url}
+                  headers={headers}
+                  body={body}
+                  showResolvedBody={false}
+                  variablesOverride={(environment?.variables || collection?.variables) ? {
+                    ...(collection?.variables || {}),
+                    ...(environment?.variables || {}),
+                  } : undefined}
+                />
+              </div>
+            </div>
+          )}
+        </aside>
       </div>
 
       {/* Response Panel */}
