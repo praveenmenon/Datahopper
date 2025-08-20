@@ -470,7 +470,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
               <VariableAwareInput
                 value={url}
                 onChange={(e) => setUrl((e.target as HTMLInputElement).value)}
-                placeholder="Enter URL (supports {{variables}})"
+                placeholder="Enter the request URL— variables are allowed with {{name}}"
                 variables={{
                   ...(collection?.variables || {}),
                   ...(environment?.variables || {}),
@@ -485,14 +485,6 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
             >
               <Play className="h-4 w-4 mr-2" />
               {runRequest.isLoading ? 'Sending...' : 'Send'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowVariables(v => !v)}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/40 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              title="Toggle Variables Preview"
-            >
-              Variables
             </button>
           </div>
         </div>
@@ -610,16 +602,16 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
           )}
         </div>
 
-        {/* Variables Preview Drawer - pushes content by occupying width */}
+        {/* Variables Preview Drawer - collapses to mini bar with icon */}
         <aside
           className={clsx(
-            'overflow-hidden transition-all duration-300 bg-gray-50 dark:bg-gray-900 dark:text-white border-l border-gray-200 dark:border-gray-700',
-            showVariables ? 'w-80' : 'w-0'
+            'overflow-hidden transition-all duration-300 bg-gray-50 dark:bg-gray-900 dark:text-white border-l border-gray-200 dark:border-gray-700 flex flex-col',
+            showVariables ? 'w-80' : 'w-10'
           )}
           aria-label="Variables preview drawer"
         >
-          {showVariables && (
-            <div className="h-full flex flex-col">
+          {showVariables ? (
+            <>
               <div className="p-4 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
                 <h2 className="text-sm font-medium">Variables Preview</h2>
                 <button
@@ -644,6 +636,17 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
                   } : undefined}
                 />
               </div>
+            </>
+          ) : (
+            <div className="p-2">
+              <button
+                type="button"
+                className="rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                onClick={() => setShowVariables(true)}
+                title="Open Variables Preview"
+              >
+                <span className="font-mono text-lg text-gray-600 dark:text-gray-300">{`{}`}</span>
+              </button>
             </div>
           )}
         </aside>

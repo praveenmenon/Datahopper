@@ -258,55 +258,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               })}
             </div>
           )}
-          {/* Environments section moved below collections */}
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700 mt-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center text-lg font-semibold text-gray-900 dark:text-white">
-                <Globe className="h-5 w-5 mr-2 text-gray-500 dark:text-gray-300" /> Environments
-              </div>
-              <button
-                className="inline-flex items-center p-1 text-xs rounded-md transition-colors text-gray-600 dark:text-gray-100 hover:text-primary-600 dark:hover:text-white hover:bg-primary-50/20 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-primary-500/60"
-                title="Add Environment"
-                onClick={() => setShowEnvModal(true)}
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-            {/* List environments */}
-            <div className="mt-2 space-y-1">
-              {(environments || []).length === 0 ? (
-                <div className="text-xs text-gray-500">No environments yet. Use + to create.</div>
-              ) : (
-                (environments || []).map((env) => (
-                  <div key={env.name} className="group flex items-center justify-between px-2 py-1 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 focus:bg-gray-100 dark:focus:bg-gray-700/60">
-                    <div className="text-sm text-gray-800 dark:text-white truncate">{env.name}</div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        className="p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus:bg-primary-50 dark:focus:bg-primary-900/30 rounded"
-                        title="Edit Environment"
-                        onClick={() => {
-                          setEditingEnv(env);
-                          setShowEnvModal(true);
-                        }}
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                      <button
-                        className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 focus:bg-red-50 dark:focus:bg-red-900/30 rounded"
-                        title="Delete Environment"
-                        onClick={async () => {
-                          if (!confirm(`Delete environment "${env.name}"?`)) return;
-                          await deleteEnvironment.mutateAsync(env.name);
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          
         </div>
       </div>
 

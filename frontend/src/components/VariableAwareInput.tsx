@@ -115,11 +115,11 @@ export const VariableAwareInput: React.FC<Props> = ({
           px-3 py-2 pr-10 bg-transparent
           font-mono text-sm leading-5 tracking-normal
           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-          text-transparent caret-slate-900 dark:caret-white
+          ${str.length > 0 ? 'text-transparent' : 'text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500'} caret-slate-900 dark:caret-white
           ${className}
         `}
-        // keep overlay visible in all themes/browsers
-        style={{ WebkitTextFillColor: 'transparent', backgroundColor: 'transparent' }}
+        // keep overlay visible only when there is content; otherwise allow placeholder to show
+        style={{ WebkitTextFillColor: str.length > 0 ? 'transparent' : undefined, backgroundColor: 'transparent' }}
         {...rest}
       />
 

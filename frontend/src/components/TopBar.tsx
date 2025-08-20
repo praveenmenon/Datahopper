@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Zap, Settings, Plus } from 'lucide-react';
+import { Zap, Settings, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Environment, MessageType } from '../lib/types';
 import { useRegisterProto } from '../lib/useData';
 import { Dropdown } from './Dropdown';
 import { RegisterProtoModal } from './RegisterProtoModal';
 import { SettingsModal } from './SettingsModal';
 import { type ThemeMode, setTheme as persistTheme, getStoredTheme, getSystemPrefersDark } from '../lib/theme';
+import { EnvironmentModal } from './EnvironmentModal';
 
 interface TopBarProps {
   environments: Environment[];
@@ -24,6 +25,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 }) => {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showEnvModal, setShowEnvModal] = useState(false);
   const [theme, setThemeState] = useState<ThemeMode>(() => getStoredTheme() ?? 'system');
 
   const applyTheme = (t: ThemeMode) => {
@@ -56,12 +58,53 @@ export const TopBar: React.FC<TopBarProps> = ({
                 <label htmlFor="environment" className="text-sm font-medium text-gray-700 dark:text-gray-200">
                   Environment:
                 </label>
-                <div className="w-48">
+                <div className="w-56">
                   <Dropdown
                     options={environments.map((e) => ({ label: e.name, value: e.name }))}
                     value={activeEnvironment || ''}
                     onChange={(v) => onEnvironmentChange(v)}
                     placeholder={environments.length === 0 ? '(no environments)' : 'Select environment'}
+                    headerContent={
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Environments</span>
+                        <button
+                          type="button"
+                          className="px-2 py-1 text-xs rounded bg-primary-600 text-white hover:bg-primary-700"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowEnvModal(true); }}
+                        >
+                          New
+                        </button>
+                      </div>
+                    }
+                    renderItem={(opt, onSelect) => (
+                      <div className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                        <button
+                          type="button"
+                          className="text-left flex-1 text-sm"
+                          onClick={(e) => { e.preventDefault(); onSelect(); }}
+                        >
+                          {opt.label}
+                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            className="p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowEnvModal(true); }}
+                            title="Edit environment"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); alert(`Delete env '${opt.value}' (wire to API)`); }}
+                            title="Delete environment"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   />
                 </div>
               </div>
@@ -97,6 +140,13 @@ export const TopBar: React.FC<TopBarProps> = ({
         onClose={() => setShowSettings(false)}
         theme={theme}
         onThemeChange={applyTheme}
+      />
+      <EnvironmentModal
+        isOpen={showEnvModal}
+        mode="create"
+        initial={null}
+        onClose={() => setShowEnvModal(false)}
+        onSave={async () => setShowEnvModal(false)}
       />
     </>
   );

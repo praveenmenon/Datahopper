@@ -21,26 +21,20 @@ function App() {
 
   // Restore previously selected environment on first load (backend pref first, then local)
   useEffect(() => {
+    if (environmentsLoading) return; // wait until envs are loaded to avoid defaulting early
     (async () => {
-      // Prefer backend preference when available; fallback to localStorage
+      let candidate = '';
       try {
         const pref = await preferencesApi.get();
-        const fromBackend = pref?.activeEnvironment;
-        const candidate = fromBackend || localStorage.getItem('activeEnvironment') || '';
-        if (candidate && !environmentsLoading && environments.length > 0) {
-          if (environments.find(e => e.name === candidate)) {
-            setActiveEnvironment(candidate);
-          }
-        }
+        const fromBackend = (pref?.activeEnvironment ?? pref?.active_environment ?? pref?.text_value ?? pref?.value) as string | undefined;
+        candidate = fromBackend || localStorage.getItem('activeEnvironment') || '';
       } catch {
-        const stored = localStorage.getItem('activeEnvironment');
-        if (stored && !environmentsLoading && environments.length > 0) {
-          if (environments.find(e => e.name === stored)) {
-            setActiveEnvironment(stored);
-          }
-        }
+        candidate = localStorage.getItem('activeEnvironment') || '';
       }
-      // Mark restore complete so downstream effects can run safely
+      if (candidate && environments.length > 0 && environments.find(e => e.name === candidate)) {
+        setActiveEnvironment(candidate);
+      }
+      // Mark restore complete only after we have considered preferences/local and envs are available
       setHasRestoredEnv(true);
     })();
   }, [environmentsLoading, environments]);
@@ -61,16 +55,15 @@ function App() {
   // If the stored/active environment no longer exists, clear it.
   // After restore finishes, if nothing is set, default to first environment.
   useEffect(() => {
-    if (!environmentsLoading) {
-      if (activeEnvironment && !environments.find(e => e.name === activeEnvironment)) {
-        setActiveEnvironment('');
-      }
-      // If no environment is selected and there are environments available, select the first one
-      if (hasRestoredEnv && !activeEnvironment && environments.length > 0) {
-        const first = environments[0].name;
-        setActiveEnvironment(first);
-        try { preferencesApi.update({ activeEnvironment: first }); } catch {}
-      }
+    if (environmentsLoading) return;
+    if (activeEnvironment && !environments.find(e => e.name === activeEnvironment)) {
+      setActiveEnvironment('');
+    }
+    // If nothing restored and nothing in localStorage, default to first env
+    if (hasRestoredEnv && !activeEnvironment && environments.length > 0 && !localStorage.getItem('activeEnvironment')) {
+      const first = environments[0].name;
+      setActiveEnvironment(first);
+      try { preferencesApi.update({ activeEnvironment: first }); } catch {}
     }
   }, [environmentsLoading, environments, activeEnvironment, hasRestoredEnv]);
 

@@ -13,6 +13,8 @@ type DropdownProps = {
   itemClassName?: string;
   labelClassName?: string;
   itemClassNameFn?: (opt: DropdownOption) => string | undefined;
+  headerContent?: React.ReactNode;
+  renderItem?: (opt: DropdownOption, onSelect: () => void) => React.ReactNode;
 };
 
 export const Dropdown: React.FC<DropdownProps> = ({
@@ -25,6 +27,8 @@ export const Dropdown: React.FC<DropdownProps> = ({
   itemClassName,
   labelClassName,
   itemClassNameFn,
+  headerContent,
+  renderItem,
 }) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -63,9 +67,21 @@ export const Dropdown: React.FC<DropdownProps> = ({
       </button>
       {open && (
         <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 dark:text-white shadow-lg ring-1 ring-black ring-opacity-5 rounded-md max-h-60 overflow-auto">
+          {headerContent && (
+            <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 text-xs text-gray-600 dark:text-gray-300">
+              {headerContent}
+            </div>
+          )}
           <ul className="py-1 text-sm">
             {options.map(opt => {
               const colorClass = itemClassNameFn ? itemClassNameFn(opt) : 'text-gray-700 dark:text-gray-200';
+              if (renderItem) {
+                return (
+                  <li key={opt.value} className="px-0">
+                    {renderItem(opt, () => { onChange(opt.value); setOpen(false); })}
+                  </li>
+                );
+              }
               return (
                 <li key={opt.value}>
                   <button
