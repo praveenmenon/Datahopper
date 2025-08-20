@@ -490,119 +490,131 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         </div>
       </div>
 
-      {/* Request Configuration */}
-      <div className="relative flex-1 flex overflow-visible">
-        {/* Left Panel - Tabs (Proto / Headers) and Body */}
-        <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-gray-700">
-          {/* Tabs */}
-          <div className="px-4 pt-2 mt-3 border-b border-gray-200 dark:border-gray-700">
-            <nav className="flex space-x-6">
-              <button
-                type="button"
-                onClick={() => setActiveLeftTab('proto')}
-                className={clsx(
-                  'pb-3 inline-flex items-center text-sm font-medium border-b-2',
-                  activeLeftTab === 'proto'
-                    ? 'border-primary-600 text-primary-600 dark:text-white'
-                    : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
-                )}
-              >
-                <Code2 className="h-4 w-4 mr-2" /> Protobuf Configuration
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveLeftTab('headers')}
-                className={clsx(
-                  'pb-3 inline-flex items-center text-sm font-medium border-b-2',
-                  activeLeftTab === 'headers'
-                    ? 'border-primary-600 text-primary-600 dark:text-white'
-                    : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
-                )}
-              >
-                <List className="h-4 w-4 mr-2" /> Headers
-              </button>
-            </nav>
-          </div>
+      {/* Main content row: left (config + response) | right (variables drawer) */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left column: configuration and response stacked */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Request Configuration */}
+          <div className="relative flex-1 flex flex-col overflow-visible min-h-0">
+            {/* Tabs */}
+            <div className="px-4 pt-2 mt-3 border-b border-gray-200 dark:border-gray-700">
+              <nav className="flex space-x-6">
+                <button
+                  type="button"
+                  onClick={() => setActiveLeftTab('proto')}
+                  className={clsx(
+                    'pb-3 inline-flex items-center text-sm font-medium border-b-2',
+                    activeLeftTab === 'proto'
+                      ? 'border-primary-600 text-primary-600 dark:text-white'
+                      : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
+                  )}
+                >
+                  <Code2 className="h-4 w-4 mr-2" /> Protobuf Configuration
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveLeftTab('headers')}
+                  className={clsx(
+                    'pb-3 inline-flex items-center text-sm font-medium border-b-2',
+                    activeLeftTab === 'headers'
+                      ? 'border-primary-600 text-primary-600 dark:text-white'
+                      : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
+                  )}
+                >
+                  <List className="h-4 w-4 mr-2" /> Headers
+                </button>
+              </nav>
+            </div>
 
-          {/* Tab content */}
-          <div className="px-4 py-3">
-            {activeLeftTab === 'proto' ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Request Message Type
-                  </label>
-                  <Dropdown
-                    options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
-                    value={protoMessage}
-                    onChange={setProtoMessage}
-                    placeholder="Select message type"
-                    className="w-full"
-                  />
+            {/* Tab content */}
+            <div className="px-4 py-3">
+              {activeLeftTab === 'proto' ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Request Message Type
+                    </label>
+                    <Dropdown
+                      options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
+                      value={protoMessage}
+                      onChange={setProtoMessage}
+                      placeholder="Select message type"
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Success Response Message Type
+                    </label>
+                    <Dropdown
+                      options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
+                      value={responseType}
+                      onChange={setResponseType}
+                      placeholder="Select message type"
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Error Response Message Type
+                    </label>
+                    <Dropdown
+                      options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
+                      value={errorResponseType}
+                      onChange={setErrorResponseType}
+                      placeholder="Select message type"
+                      className="w-full"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Success Response Message Type
-                  </label>
-                  <Dropdown
-                    options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
-                    value={responseType}
-                    onChange={setResponseType}
-                    placeholder="Select message type"
-                    className="w-full"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Error Response Message Type
-                  </label>
-                  <Dropdown
-                    options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
-                    value={errorResponseType}
-                    onChange={setErrorResponseType}
-                    placeholder="Select message type"
-                    className="w-full"
-                  />
-                </div>
-              </div>
-            ) : (
-              <HeadersEditor
-                headers={headers}
-                onChange={setHeaders}
-                variables={{
-                  ...(collection?.variables || {}),
-                  ...(environment?.variables || {}),
-                }}
-              />
-            )}
-          </div>
-
-          {/* Body */}
-          {(method !== 'GET' || protoMessage) && (
-            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-              {messageFields && messageFields.length > 0 ? (
-                <NestedBodyEditor
-                  fields={messageFields}
-                  values={body}
-                  onChange={setBody}
-                  // Pass schema for oneof and cardinality awareness
-                  // @ts-ignore - component currently accepts props defined below
-                  schema={schema || undefined}
-                />
               ) : (
-                <BodyEditor
-                  body={body}
-                  onChange={setBody}
-                  protoMessage={protoMessage}
-                  messageFields={messageFields}
-                  onGenerateFromProto={handleGenerateFromProtoClick}
+                <HeadersEditor
+                  headers={headers}
+                  onChange={setHeaders}
+                  variables={{
+                    ...(collection?.variables || {}),
+                    ...(environment?.variables || {}),
+                  }}
                 />
               )}
             </div>
-          )}
+
+            {/* Body */}
+            {(method !== 'GET' || protoMessage) && (
+              <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                {messageFields && messageFields.length > 0 ? (
+                  <NestedBodyEditor
+                    fields={messageFields}
+                    values={body}
+                    onChange={setBody}
+                    // Pass schema for oneof and cardinality awareness
+                    // @ts-ignore - component currently accepts props defined below
+                    schema={schema || undefined}
+                  />
+                ) : (
+                  <BodyEditor
+                    body={body}
+                    onChange={setBody}
+                    protoMessage={protoMessage}
+                    messageFields={messageFields}
+                    onGenerateFromProto={handleGenerateFromProtoClick}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Response Panel */}
+          <div className="border-t border-gray-200 dark:border-gray-700 mt-2">
+            <ResponsePanel
+              response={response}
+              isLoading={isLoading}
+              error={error || undefined}
+            />
+          </div>
         </div>
 
-        {/* Variables Preview Drawer - collapses to mini bar with icon */}
+        {/* Variables Preview Drawer - spans full height alongside left column */}
         <aside
           className={clsx(
             'overflow-hidden transition-all duration-300 bg-gray-50 dark:bg-gray-900 dark:text-white border-l border-gray-200 dark:border-gray-700 flex flex-col',
@@ -650,15 +662,6 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
             </div>
           )}
         </aside>
-      </div>
-
-      {/* Response Panel */}
-      <div className="border-t border-gray-200 dark:border-gray-700 mt-2">
-        <ResponsePanel
-          response={response}
-          isLoading={isLoading}
-          error={error || undefined}
-        />
       </div>
     </div>
   );

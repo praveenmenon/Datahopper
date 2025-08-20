@@ -15,6 +15,7 @@ interface SidebarProps {
   onCollectionSelect: (collection: Collection | null) => void;
   environments?: Environment[];
   onEnvironmentCreated?: (name: string) => void;
+  onCollapse?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -25,6 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCollectionSelect,
   environments = [],
   onEnvironmentCreated,
+  onCollapse,
 }) => {
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set());
   const [showCreateCollection, setShowCreateCollection] = useState(false);
@@ -107,12 +109,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      <div className="w-80 min-h-screen bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col text-gray-900 dark:text-white">
+      <div className="w-full min-h-screen bg-white dark:bg-gray-800 flex flex-col text-gray-900 dark:text-white transition-all duration-300">
         {/* Header */}
         <div className="p-4 pb-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between mb-0">
             <div className="flex items-center text-lg font-semibold text-gray-900 dark:text-white">
-              <Archive className="h-5 w-5 mr-2 text-gray-500 dark:text-gray-300" /> Collections
+              <button
+                type="button"
+                onClick={() => onCollapse && onCollapse()}
+                className="p-1 mr-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                title="Collapse sidebar"
+              >
+                <Archive className="h-5 w-5 text-gray-500 dark:text-gray-300" />
+              </button>
+              Collections
             </div>
             <button
               onClick={() => setShowCreateCollection(true)}

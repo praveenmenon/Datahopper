@@ -5,12 +5,16 @@ import { RequestEditor } from './components/RequestEditor';
 import { useCollections, useEnvironments, useMessageTypes } from './lib/useData';
 import { preferencesApi } from './lib/api';
 import { Collection } from './lib/types';
+import { Archive } from 'lucide-react';
 
 function App() {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<string | null>(null);
   const [activeEnvironment, setActiveEnvironment] = useState<string>('');
   const [hasRestoredEnv, setHasRestoredEnv] = useState<boolean>(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(320); // px
+  const [isResizing, setIsResizing] = useState<boolean>(false);
 
   // Data fetching
   const { data: collections = [], isLoading: collectionsLoading } = useCollections();
@@ -114,16 +118,58 @@ function App() {
         showEnvironmentSelector={hasRestoredEnv}
       />
       
-      <div className="flex min-h-screen pt-16">
-          <Sidebar 
-          collections={collections}
-          selectedCollection={selectedCollection}
-          selectedRequest={selectedRequest}
-          onRequestSelect={handleRequestSelect}
-          onCollectionSelect={setSelectedCollection}
-          environments={environments}
-          onEnvironmentCreated={(name) => { setActiveEnvironment(name); localStorage.setItem('activeEnvironment', name); }}
-        />
+      <div className={`flex min-h-screen pt-16 ${isResizing ? 'select-none cursor-col-resize' : ''}`}>
+        <div
+          className={`relative transition-[width] duration-150`}
+          id="sidebar-width-wrapper"
+          style={{ width: sidebarCollapsed ? 48 : sidebarWidth, minWidth: sidebarCollapsed ? 48 : 200, maxWidth: 600 }}
+        >
+          {sidebarCollapsed ? (
+            <div className="h-full flex items-start justify-center py-3">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(false)}
+                className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                title="Expand sidebar"
+              >
+                <Archive className="h-5 w-5 text-gray-500 dark:text-gray-300" />
+              </button>
+            </div>
+          ) : (
+            <Sidebar 
+              collections={collections}
+              selectedCollection={selectedCollection}
+              selectedRequest={selectedRequest}
+              onRequestSelect={handleRequestSelect}
+              onCollectionSelect={setSelectedCollection}
+              environments={environments}
+              onEnvironmentCreated={(name) => { setActiveEnvironment(name); localStorage.setItem('activeEnvironment', name); }}
+              onCollapse={() => setSidebarCollapsed(true)}
+            />
+          )}
+        </div>
+        {/* Full-height vertical divider with drag handle */}
+        <div
+          className="relative w-[1px] bg-gray-200 dark:bg-gray-700"
+          onMouseDown={(e) => {
+            setIsResizing(true);
+            const onMove = (ev: MouseEvent) => {
+              const newW = Math.max(48, Math.min(600, ev.clientX));
+              setSidebarWidth(newW);
+              if (newW <= 48) setSidebarCollapsed(true); else setSidebarCollapsed(false);
+            };
+            const onUp = () => {
+              setIsResizing(false);
+              document.removeEventListener('mousemove', onMove);
+              document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+          }}
+          title="Drag to resize sidebar"
+        >
+          <div className="absolute inset-y-0 right-[-3px] w-2 cursor-col-resize" />
+        </div>
         
         <div className="flex-1 flex flex-col">
           <RequestEditor 
