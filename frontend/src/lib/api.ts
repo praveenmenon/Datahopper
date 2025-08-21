@@ -189,6 +189,8 @@ export type SaveRequestPayload = {
     headers: Record<string, any>;
     bodyModel: Record<string, any>;
     protoMessageFqmn?: string;
+    responseMessageFqmn?: string;
+    errorResponseMessageFqmn?: string;
     timeoutMs?: number;
   };
 };
