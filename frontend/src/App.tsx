@@ -105,7 +105,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-800 dark:text-white">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-800 dark:text-white flex flex-col">
       <TopBar 
         environments={environments}
         activeEnvironment={activeEnvironment}
@@ -118,7 +118,7 @@ function App() {
         showEnvironmentSelector={hasRestoredEnv}
       />
       
-      <div className={`flex min-h-screen pt-16 ${isResizing ? 'select-none cursor-col-resize' : ''}`}>
+      <div className={`flex flex-1 pt-16 pb-10 ${isResizing ? 'select-none cursor-col-resize' : ''}`}>
         <div
           className={`relative transition-[width] duration-150`}
           id="sidebar-width-wrapper"
@@ -181,6 +181,10 @@ function App() {
           />
         </div>
       </div>
+
+      <footer className="px-4 py-2 text-xs text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 fixed bottom-0 left-0 right-0 z-50">
+        DataHopper — Ready
+      </footer>
     </div>
   );
 }

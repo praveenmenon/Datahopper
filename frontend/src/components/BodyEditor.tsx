@@ -8,6 +8,7 @@ interface BodyEditorProps {
   protoMessage?: string;
   messageFields?: MessageField[];
   onGenerateFromProto?: (fields: MessageField[]) => void;
+  showHeader?: boolean;
 }
 
 export const BodyEditor: React.FC<BodyEditorProps> = ({ 
@@ -15,7 +16,8 @@ export const BodyEditor: React.FC<BodyEditorProps> = ({
   onChange, 
   protoMessage, 
   messageFields, 
-  onGenerateFromProto 
+  onGenerateFromProto,
+  showHeader = true,
 }) => {
   const addField = () => {
     onChange([...body, { path: '', value: '' }]);
@@ -48,35 +50,37 @@ export const BodyEditor: React.FC<BodyEditorProps> = ({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900">Request Body</h3>
-        <div className="flex space-x-2">
-          {protoMessage && onGenerateFromProto && (
+      {showHeader && (
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-gray-900">Request Body</h3>
+          <div className="flex space-x-2">
+            {protoMessage && onGenerateFromProto && (
+              <button
+                onClick={() => messageFields && messageFields.length > 0 && onGenerateFromProto(messageFields)}
+                disabled={!messageFields || messageFields.length === 0}
+                className={`inline-flex items-center text-xs ${(!messageFields || messageFields.length === 0) ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-700'} transition-colors`}
+                title={!messageFields || messageFields.length === 0 ? 'Loading proto fields…' : 'Generate fields from protobuf message'}
+              >
+                <Zap className="h-3 w-3 mr-1" />
+                Generate from Proto
+              </button>
+            )}
             <button
-              onClick={() => messageFields && messageFields.length > 0 && onGenerateFromProto(messageFields)}
-              disabled={!messageFields || messageFields.length === 0}
-              className={`inline-flex items-center text-xs ${(!messageFields || messageFields.length === 0) ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-700'} transition-colors`}
-              title={!messageFields || messageFields.length === 0 ? 'Loading proto fields…' : 'Generate fields from protobuf message'}
+              onClick={removeEmptyFields}
+              className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
             >
-              <Zap className="h-3 w-3 mr-1" />
-              Generate from Proto
+              Clean up
             </button>
-          )}
-          <button
-            onClick={removeEmptyFields}
-            className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            Clean up
-          </button>
-          <button
-            onClick={addField}
-            className="inline-flex items-center text-xs text-primary-600 hover:text-primary-700 transition-colors"
-          >
-            <Plus className="h-3 w-3 mr-1" />
-            Add Field
-          </button>
+            <button
+              onClick={addField}
+              className="inline-flex items-center text-xs text-primary-600 hover:text-primary-700 transition-colors"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add Field
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {body.length === 0 ? (
         <div className="text-center py-4 text-gray-500 dark:text-gray-300 text-sm">

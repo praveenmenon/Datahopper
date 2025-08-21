@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Save, Eye, Code2, List } from 'lucide-react';
+import { Play, Save, Eye, Code2, List, ChevronDown, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 import { Collection, Environment, MessageType, BodyField, HeaderKV, MessageField, RunRequest } from '../lib/types';
 import { BodyEditor } from './BodyEditor';
@@ -45,6 +45,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [schema, setSchema] = useState<MessageSchemaMeta | null>(null);
   const [activeLeftTab, setActiveLeftTab] = useState<'proto' | 'headers'>('proto');
   const [showVariables, setShowVariables] = useState<boolean>(true);
+  const [isBodyCollapsed, setIsBodyCollapsed] = useState<boolean>(false);
 
   const runRequest = useRunRequest();
   const queryClient = useQueryClient();
@@ -287,6 +288,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     setIsLoading(true);
     setError(null);
     setResponse(null);
+    const startedAt = performance.now();
 
     try {
       // Merge variables (environment overrides collection)
@@ -339,6 +341,23 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
 
       const resp = await runRequest.mutateAsync(requestData);
       setResponse(resp);
+      try {
+        const durationMs = Math.round(performance.now() - startedAt);
+        let sizeBytes: number | undefined;
+        if (typeof (resp as any)?.raw === 'string') {
+          sizeBytes = new TextEncoder().encode((resp as any).raw).length;
+        } else if (typeof (resp as any)?.decoded === 'string') {
+          sizeBytes = new TextEncoder().encode((resp as any).decoded).length;
+        } else if ((resp as any)?.headers) {
+          const headers: Record<string, string> = (resp as any).headers || {};
+          const key = Object.keys(headers).find(k => k.toLowerCase() === 'content-length');
+          if (key) {
+            const val = parseInt(headers[key], 10);
+            if (!Number.isNaN(val)) sizeBytes = val;
+          }
+        }
+        (resp as any).__meta = { durationMs, sizeBytes };
+      } catch {}
       // Cache last response
       if (requestId) {
         try { localStorage.setItem(`requestResp:${requestId}`, JSON.stringify(resp)); } catch {}
@@ -495,7 +514,7 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         {/* Left column: configuration and response stacked */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Request Configuration */}
-          <div className="relative flex-1 flex flex-col overflow-visible min-h-0">
+          <div className="relative flex flex-col overflow-visible">
             {/* Tabs */}
             <div className="px-4 pt-2 mt-3 border-b border-gray-200 dark:border-gray-700">
               <nav className="flex space-x-6">
@@ -581,35 +600,63 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
 
             {/* Body */}
             {(method !== 'GET' || protoMessage) && (
-              <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                {messageFields && messageFields.length > 0 ? (
-                  <NestedBodyEditor
-                    fields={messageFields}
-                    values={body}
-                    onChange={setBody}
-                    // Pass schema for oneof and cardinality awareness
-                    // @ts-ignore - component currently accepts props defined below
-                    schema={schema || undefined}
-                  />
-                ) : (
-                  <BodyEditor
-                    body={body}
-                    onChange={setBody}
-                    protoMessage={protoMessage}
-                    messageFields={messageFields}
-                    onGenerateFromProto={handleGenerateFromProtoClick}
-                  />
+              <div className={clsx(
+                'border-t border-gray-200 dark:border-gray-700',
+                isBodyCollapsed ? 'px-4 pt-4 pb-4' : 'p-4'
+              )}>
+                <button
+                  type="button"
+                  onClick={() => setIsBodyCollapsed(v => !v)}
+                  aria-expanded={!isBodyCollapsed}
+                  className={clsx(
+                    'w-full flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-700/40 rounded px-1.5 py-0',
+                    isBodyCollapsed ? 'mb-0' : 'mb-2'
+                  )}
+                >
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white">Request Body</h3>
+                  <span className="inline-flex items-center text-xs text-gray-500 dark:text-gray-300">
+                    {isBodyCollapsed ? (
+                      <><ChevronRight className="h-4 w-4 mr-1" /> Expand</>
+                    ) : (
+                      <><ChevronDown className="h-4 w-4 mr-1" /> Collapse</>
+                    )}
+                  </span>
+                </button>
+                {!isBodyCollapsed && (
+                  <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md overflow-auto max-h-96">
+                  {messageFields && messageFields.length > 0 ? (
+                    <NestedBodyEditor
+                      fields={messageFields}
+                      values={body}
+                      onChange={setBody}
+                      // Pass schema for oneof and cardinality awareness
+                      // @ts-ignore - component currently accepts props defined below
+                      schema={schema || undefined}
+                    />
+                  ) : (
+                    <BodyEditor
+                      body={body}
+                      onChange={setBody}
+                      protoMessage={protoMessage}
+                      messageFields={messageFields}
+                      onGenerateFromProto={handleGenerateFromProtoClick}
+                      showHeader={false}
+                    />
+                  )}
+                  </div>
                 )}
               </div>
             )}
           </div>
 
           {/* Response Panel */}
-          <div className="border-t border-gray-200 dark:border-gray-700 mt-2">
+          <div className={clsx('border-t border-gray-200 dark:border-gray-700', isBodyCollapsed ? 'mt-0' : 'mt-2')}>
             <ResponsePanel
               response={response}
               isLoading={isLoading}
               error={error || undefined}
+              durationMs={(response as any)?.__meta?.durationMs}
+              sizeBytes={(response as any)?.__meta?.sizeBytes}
             />
           </div>
         </div>

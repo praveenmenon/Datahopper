@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Copy, Check, AlertCircle, Clock, Globe, Code2, List } from 'lucide-react';
+import { JsonViewer } from './JsonViewer';
 import clsx from 'clsx';
 
 interface ResponseData {
@@ -14,9 +15,11 @@ interface ResponsePanelProps {
   response: ResponseData | null;
   isLoading: boolean;
   error?: string;
+  durationMs?: number;
+  sizeBytes?: number;
 }
 
-export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoading, error }) => {
+export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoading, error, durationMs, sizeBytes }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'decoded' | 'headers'>('decoded');
 
@@ -38,6 +41,15 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
     return 'text-gray-600 bg-gray-50 dark:text-gray-300 dark:bg-gray-900/40';
   };
 
+  const formatBytes = (bytes?: number) => {
+    if (bytes === undefined || bytes === null || isNaN(bytes)) return '';
+    const units = ['B','KB','MB','GB'];
+    let b = Math.max(0, bytes);
+    let i = 0;
+    while (b >= 1024 && i < units.length - 1) { b /= 1024; i++; }
+    return `${b % 1 === 0 ? b : b.toFixed(1)} ${units[i]}`;
+  };
+
 
 
   const formatJson = (jsonString: string) => {
@@ -47,6 +59,11 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
     } catch {
       return jsonString;
     }
+  };
+
+  const safeParse = (jsonString?: string) => {
+    if (!jsonString) return null;
+    try { return JSON.parse(jsonString); } catch { return jsonString; }
   };
 
   if (isLoading) {
@@ -86,54 +103,59 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
 
   return (
     <div className="bg-white dark:bg-gray-800 dark:text-white">
-      {/* Response Header */}
-      <div className="border-b border-gray-200 dark:border-gray-700 p-4">
-        <div className="flex items-center space-x-3">
-          <div className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(response.status)}`}>
-            {response.status} {getStatusText(response.status)}
-          </div>
-          <div className="text-sm text-gray-500 dark:text-gray-300">
-            Response received
-          </div>
-        </div>
-        {response.decodeError && (
-          <div className="mt-3 text-xs text-yellow-800 dark:text-yellow-200 bg-yellow-50 dark:bg-yellow-900/40 border border-yellow-200 dark:border-yellow-900 rounded p-2">
+      {/* Optional decode error banner */}
+      {response.decodeError && (
+        <div className="border-b border-gray-200 dark:border-gray-700 p-4">
+          <div className="text-xs text-yellow-800 dark:text-yellow-200 bg-yellow-50 dark:bg-yellow-900/40 border border-yellow-200 dark:border-yellow-900 rounded p-2">
             Could not decode using the selected message type. Showing raw body.
             <div className="mt-1 font-mono break-all">{response.decodeError}</div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Response Content with Tabs */}
       <div className="flex flex-col">
         {/* Tabs */}
         <div className="px-4 pt-2 border-b border-gray-200 dark:border-gray-700">
-          <nav className="flex space-x-6">
-            <button
-              type="button"
-              onClick={() => setActiveTab('decoded')}
-              className={clsx(
-                'pb-3 inline-flex items-center text-sm font-medium border-b-2',
-                activeTab === 'decoded'
-                  ? 'border-primary-600 text-primary-600 dark:text-white'
-                  : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
+          <div className="flex items-center justify-between">
+            <nav className="flex space-x-6">
+              <button
+                type="button"
+                onClick={() => setActiveTab('decoded')}
+                className={clsx(
+                  'pb-3 inline-flex items-center text-sm font-medium border-b-2',
+                  activeTab === 'decoded'
+                    ? 'border-primary-600 text-primary-600 dark:text-white'
+                    : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
+                )}
+              >
+                <Code2 className="h-4 w-4 mr-2" /> Decoded Response
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('headers')}
+                className={clsx(
+                  'pb-3 inline-flex items-center text-sm font-medium border-b-2',
+                  activeTab === 'headers'
+                    ? 'border-primary-600 text-primary-600 dark:text-white'
+                    : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
+                )}
+              >
+                <List className="h-4 w-4 mr-2" /> Response Headers
+              </button>
+            </nav>
+            <div className="flex items-center space-x-3 flex-wrap gap-y-2">
+              <div className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(response.status)}`}>
+                {response.status} {getStatusText(response.status)}
+              </div>
+              {typeof durationMs === 'number' && (
+                <div className="text-sm text-gray-500 dark:text-gray-300">{durationMs} ms</div>
               )}
-            >
-              <Code2 className="h-4 w-4 mr-2" /> Decoded Response
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('headers')}
-              className={clsx(
-                'pb-3 inline-flex items-center text-sm font-medium border-b-2',
-                activeTab === 'headers'
-                  ? 'border-primary-600 text-primary-600 dark:text-white'
-                  : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
+              {typeof sizeBytes === 'number' && (
+                <div className="text-sm text-gray-500 dark:text-gray-300">{formatBytes(sizeBytes)}</div>
               )}
-            >
-              <List className="h-4 w-4 mr-2" /> Response Headers
-            </button>
-          </nav>
+            </div>
+          </div>
         </div>
 
         {/* Tab body */}
@@ -156,9 +178,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
                       {copiedField === 'decoded' ? 'Copied!' : 'Copy'}
                     </button>
                   </div>
-                  <pre className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md text-xs font-mono text-gray-800 dark:text-gray-100 overflow-auto max-h-64">
-                    {formatJson(response.decoded)}
-                  </pre>
+                  <JsonViewer data={safeParse(response.decoded)} showLineNumbers defaultExpanded />
                 </div>
               )}
               {response.raw && (
@@ -177,9 +197,9 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
                       {copiedField === 'raw' ? 'Copied!' : 'Copy'}
                     </button>
                   </div>
-                  <pre className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md text-xs font-mono text-gray-800 dark:text-gray-100 overflow-auto max-h-64">
+                  <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md text-xs font-mono text-gray-800 dark:text-gray-100 overflow-auto max-h-64">
                     {response.raw}
-                  </pre>
+                  </div>
                 </div>
               )}
               {!response.decoded && !response.raw && (

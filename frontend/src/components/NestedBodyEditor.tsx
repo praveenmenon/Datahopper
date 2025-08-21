@@ -395,10 +395,6 @@ export const NestedBodyEditor: React.FC<NestedBodyEditorProps> = ({ fields, valu
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white">Request Body</h3>
-      </div>
-
       {rootChildren.length === 0 ? (
         <div className="text-center py-4 text-gray-500 text-sm">No fields available for this message</div>
       ) : (
