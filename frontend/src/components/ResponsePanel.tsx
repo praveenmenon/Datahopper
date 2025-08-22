@@ -21,7 +21,7 @@ interface ResponsePanelProps {
 
 export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoading, error, durationMs, sizeBytes }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'decoded' | 'headers'>('decoded');
+  const [activeTab, setActiveTab] = useState<'decoded' | 'rawProto' | 'headers'>('decoded');
 
   const copyToClipboard = async (text: string, field: string) => {
     try {
@@ -133,6 +133,18 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
               </button>
               <button
                 type="button"
+                onClick={() => setActiveTab('rawProto')}
+                className={clsx(
+                  'pb-3 inline-flex items-center text-sm font-medium border-b-2',
+                  activeTab === 'rawProto'
+                    ? 'border-primary-600 text-primary-600 dark:text-white'
+                    : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
+                )}
+              >
+                <Code2 className="h-4 w-4 mr-2" /> Raw Proto Output
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveTab('headers')}
                 className={clsx(
                   'pb-3 inline-flex items-center text-sm font-medium border-b-2',
@@ -141,7 +153,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
                     : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
                 )}
               >
-                <List className="h-4 w-4 mr-2" /> Response Headers
+                <List className="h-4 w-4 mr-1" /> Response Headers
               </button>
             </nav>
             <div className="flex items-center space-x-3 flex-wrap gap-y-2">
@@ -181,10 +193,19 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
                   <JsonViewer data={safeParse(response.decoded)} showLineNumbers defaultExpanded />
                 </div>
               )}
+              {!response.decoded && (
+                <div className="text-center py-8 text-gray-500 dark:text-gray-300">
+                  <p className="text-sm">No decoded response</p>
+                  <p className="text-xs">This response could not be decoded</p>
+                </div>
+              )}
+            </div>
+          ) : activeTab === 'rawProto' ? (
+            <div className="space-y-4">
               {response.raw && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-white">Raw Response</h3>
+                    <h3 className="text-sm font-medium text-gray-900 dark:text-white">Raw Proto Output</h3>
                     <button
                       onClick={() => copyToClipboard(response.raw!, 'raw')}
                       className="inline-flex items-center text-xs text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
@@ -197,15 +218,15 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
                       {copiedField === 'raw' ? 'Copied!' : 'Copy'}
                     </button>
                   </div>
-                  <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md text-xs font-mono text-gray-800 dark:text-gray-100 overflow-auto max-h-64">
+                  <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md text-xs font-mono text-gray-800 dark:text-gray-100 overflow-auto max-h-96">
                     {response.raw}
                   </div>
                 </div>
               )}
-              {!response.decoded && !response.raw && (
+              {!response.raw && (
                 <div className="text-center py-8 text-gray-500 dark:text-gray-300">
-                  <p className="text-sm">No response body</p>
-                  <p className="text-xs">This response has no content</p>
+                  <p className="text-sm">No raw response</p>
+                  <p className="text-xs">This response has no raw content</p>
                 </div>
               )}
             </div>
