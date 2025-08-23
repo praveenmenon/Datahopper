@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Folder, FileText, Plus, Trash2, Globe, Pencil, Archive } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FileText, Plus, Trash2, Pencil, Archive } from 'lucide-react';
 import { Collection, Environment } from '../lib/types';
 import { useCreateCollection, useDeleteCollection, useDeleteRequest, useCreateEnvironment, useUpdateEnvironment, useDeleteEnvironment, useUpdateCollection } from '../lib/useData';
 import { EnvironmentModal } from './EnvironmentModal';
@@ -24,7 +24,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedRequest,
   onRequestSelect,
   onCollectionSelect,
-  environments = [],
+
   onEnvironmentCreated,
   onCollapse,
 }) => {

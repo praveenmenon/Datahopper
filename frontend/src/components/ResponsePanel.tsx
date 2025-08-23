@@ -52,14 +52,14 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
 
 
 
-  const formatJson = (jsonString: string) => {
-    try {
-      const parsed = JSON.parse(jsonString);
-      return JSON.stringify(parsed, null, 2);
-    } catch {
-      return jsonString;
-    }
-  };
+  // const formatJson = (jsonString: string) => {
+  //   try {
+  //     const parsed = JSON.parse(jsonString);
+  //     return JSON.stringify(parsed, null, 2);
+  //   } catch {
+  //     return jsonString;
+  //   }
+  // };
 
   const safeParse = (jsonString?: string) => {
     if (!jsonString) return null;
@@ -173,9 +173,9 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
         {/* Tab body */}
         <div className="p-4">
           {activeTab === 'decoded' ? (
-            <div className="space-y-4">
+            <div className="h-96 flex flex-col">
               {response.decoded && (
-                <div>
+                <div className="flex-1 flex flex-col">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-medium text-gray-900 dark:text-white">Decoded Response (Protobuf → JSON)</h3>
                     <button
@@ -190,20 +190,24 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
                       {copiedField === 'decoded' ? 'Copied!' : 'Copy'}
                     </button>
                   </div>
-                  <JsonViewer data={safeParse(response.decoded)} showLineNumbers defaultExpanded />
+                  <div className="flex-1 min-h-0 h-full">
+                    <JsonViewer data={safeParse(response.decoded)} showLineNumbers defaultExpanded className="h-full" />
+                  </div>
                 </div>
               )}
               {!response.decoded && (
-                <div className="text-center py-8 text-gray-500 dark:text-gray-300">
-                  <p className="text-sm">No decoded response</p>
-                  <p className="text-xs">This response could not be decoded</p>
+                <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-300">
+                  <div className="text-center">
+                    <p className="text-sm">No decoded response</p>
+                    <p className="text-xs">This response could not be decoded</p>
+                  </div>
                 </div>
               )}
             </div>
           ) : activeTab === 'rawProto' ? (
-            <div className="space-y-4">
+            <div className="h-96 flex flex-col">
               {response.raw && (
-                <div>
+                <div className="flex-1 flex flex-col">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-medium text-gray-900 dark:text-white">Raw Proto Output</h3>
                     <button
@@ -218,31 +222,42 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, isLoadin
                       {copiedField === 'raw' ? 'Copied!' : 'Copy'}
                     </button>
                   </div>
-                  <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md text-xs font-mono text-gray-800 dark:text-gray-100 overflow-auto max-h-96">
-                    {response.raw}
+                  <div className="flex-1 min-h-0 h-full">
+                    <JsonViewer data={response.raw} showLineNumbers defaultExpanded className="h-full" />
                   </div>
                 </div>
               )}
-              {!response.raw && (
-                <div className="text-center py-8 text-gray-500 dark:text-gray-300">
-                  <p className="text-sm">No raw response</p>
-                  <p className="text-xs">This response has no raw content</p>
-                </div>
-              )}
+                              {!response.raw && (
+                  <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-300">
+                    <div className="text-center">
+                      <p className="text-sm">No raw response</p>
+                      <p className="text-xs">This response has no raw content</p>
+                    </div>
+                  </div>
+                )}
             </div>
           ) : (
-            <div>
-              <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Response Headers</h3>
-              <div className="space-y-2">
-                {Object.entries(response.headers).map(([key, value]) => (
-                  <div key={key} className="text-xs">
-                    <div className="font-medium text-gray-700 dark:text-gray-300">{key}</div>
-                    <div className="text-gray-600 dark:text-gray-300 break-all">{value}</div>
-                  </div>
-                ))}
-                {Object.keys(response.headers).length === 0 && (
-                  <p className="text-xs text-gray-500 dark:text-gray-300">No headers received</p>
-                )}
+            <div className="h-96 flex flex-col">
+              <div className="flex-1 flex flex-col">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white">Response Headers</h3>
+                </div>
+                <div className="flex-1 min-h-0 bg-gray-50 dark:bg-gray-900 p-3 rounded-md overflow-auto">
+                  {Object.entries(response.headers).map(([key, value]) => (
+                    <div key={key} className="text-xs mb-2">
+                      <div className="font-medium text-gray-700 dark:text-gray-300">{key}</div>
+                      <div className="text-gray-600 dark:text-gray-300 break-all">{value}</div>
+                    </div>
+                  ))}
+                  {Object.keys(response.headers).length === 0 && (
+                    <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-300">
+                      <div className="text-center">
+                        <p className="text-sm">No headers received</p>
+                        <p className="text-xs">This response has no headers</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

@@ -585,12 +585,14 @@ func (s *Service) processResponse(resp *ResponseContext, responseType string, er
 		}
 	}
 
+	// Always set the raw response body for reference
+	result.Raw = string(resp.Body)
+	
 	// Try to decode protobuf response if specified
 	if selectedType != "" && s.isProtobufResponse(resp.ContentType) {
 		decoded, err := s.decodeProtobufResponse(selectedType, resp.Body)
 		if err != nil {
 			s.logger.Warn().Err(err).Msg("Failed to decode protobuf response, using raw")
-			result.Raw = string(resp.Body)
 			result.DecodeError = err.Error()
 		} else {
 			result.Decoded = decoded
@@ -600,9 +602,6 @@ func (s *Service) processResponse(resp *ResponseContext, responseType string, er
 				result.DecodeError = "Decoded to an empty structure; the selected message type may be incorrect."
 			}
 		}
-	} else {
-		// Use raw response
-		result.Raw = string(resp.Body)
 	}
 
 	return result, nil

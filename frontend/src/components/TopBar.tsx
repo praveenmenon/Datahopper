@@ -5,7 +5,7 @@ import { useRegisterProto } from '../lib/useData';
 import { Dropdown } from './Dropdown';
 import { RegisterProtoModal } from './RegisterProtoModal';
 import { SettingsModal } from './SettingsModal';
-import { type ThemeMode, setTheme as persistTheme, getStoredTheme, getSystemPrefersDark } from '../lib/theme';
+import { type ThemeMode, setTheme as persistTheme, getStoredTheme } from '../lib/theme';
 import { EnvironmentModal } from './EnvironmentModal';
 
 interface TopBarProps {

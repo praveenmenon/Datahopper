@@ -201,14 +201,14 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     }
   };
 
-  const resolvedUrl = React.useMemo(() => {
-    let resolved = url || '';
-    const merged: Record<string, string> = {};
-    if (collection?.variables) Object.assign(merged, collection.variables);
-    if (environment?.variables) Object.assign(merged, environment.variables);
-    Object.entries(merged).forEach(([k, v]) => { resolved = resolved.replace(new RegExp(`{{${k}}}`, 'g'), v); });
-    return resolved;
-  }, [url, environment, collection]);
+    // const resolvedUrl = React.useMemo(() => {
+  //   let resolved = url || '';
+  //   const merged: Record<string, string> = {};
+  //   if (collection?.variables) Object.assign(merged, collection.variables);
+  //   if (environment?.variables) Object.assign(merged, environment.variables);
+  //   Object.entries(merged).forEach(([k, v]) => { resolved = resolved.replace(new RegExp(`{{${k}}}`, 'g'), v); });
+  //   return resolved;
+  // }, [url, environment, collection]);
 
   const handleSend = async () => {
     if (!url.trim()) return;

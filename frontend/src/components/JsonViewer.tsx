@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
+import clsx from 'clsx';
 
 type JsonPrimitive = string | number | boolean | null;
 
@@ -7,11 +8,12 @@ interface JsonViewerProps {
   data: any;
   showLineNumbers?: boolean;
   defaultExpanded?: boolean;
+  className?: string;
 }
 
 type ExpandedMap = Set<string>;
 
-export const JsonViewer: React.FC<JsonViewerProps> = ({ data, showLineNumbers = true, defaultExpanded = true }) => {
+export const JsonViewer: React.FC<JsonViewerProps> = ({ data, showLineNumbers = true, defaultExpanded = true, className }) => {
   const buildExpandedSet = React.useCallback((value: any): ExpandedMap => {
     const paths = new Set<string>();
     const walk = (v: any, path: string) => {
@@ -46,7 +48,7 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({ data, showLineNumbers = 
 
   let line = 0;
 
-  const LineNumber: React.FC = ({ children }) => (
+  const LineNumber: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div className="text-right pr-3 select-none text-gray-400 dark:text-gray-500 tabular-nums">
       {children}
     </div>
@@ -129,7 +131,7 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({ data, showLineNumbers = 
 
       if (open) {
         const entries = isArray ? (value as any[]).map((v, i) => [String(i), v] as [string, any]) : Object.entries(value as Record<string, any>);
-        entries.forEach(([k, v], idx) => {
+        entries.forEach(([k, v]) => {
           const child = renderNode(isArray ? null : k, v, `${nodeKey}.${k}`, depth + 1);
           rows.push(...child);
         });
@@ -156,7 +158,7 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({ data, showLineNumbers = 
   };
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md overflow-auto max-h-64">
+    <div className={clsx("bg-gray-50 dark:bg-gray-900 p-3 rounded-md overflow-auto h-full", className)}>
       {renderNode(null, data, 'root', 0)}
     </div>
   );

@@ -30,12 +30,12 @@ function App() {
       let candidate = '';
       try {
         const pref = await preferencesApi.get();
-        const fromBackend = (pref?.activeEnvironment ?? pref?.active_environment ?? pref?.text_value ?? pref?.value) as string | undefined;
+        const fromBackend = pref?.activeEnvironment as string | undefined;
         candidate = fromBackend || localStorage.getItem('activeEnvironment') || '';
       } catch {
         candidate = localStorage.getItem('activeEnvironment') || '';
       }
-      if (candidate && environments.length > 0 && environments.find(e => e.name === candidate)) {
+              if (candidate && environments.length > 0 && environments.find(env => env.name === candidate)) {
         setActiveEnvironment(candidate);
       }
       // Mark restore complete only after we have considered preferences/local and envs are available
@@ -60,7 +60,7 @@ function App() {
   // After restore finishes, if nothing is set, default to first environment.
   useEffect(() => {
     if (environmentsLoading) return;
-    if (activeEnvironment && !environments.find(e => e.name === activeEnvironment)) {
+            if (activeEnvironment && !environments.find(env => env.name === activeEnvironment)) {
       setActiveEnvironment('');
     }
     // If nothing restored and nothing in localStorage, default to first env
