@@ -1,5 +1,9 @@
+// NOTE: This is the full component with just the Protobuf Configuration section
+// changed to a side-by-side label/field layout.
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Save, Eye } from 'lucide-react';
+import { Play, Save, Code2, List, ChevronDown, ChevronRight } from 'lucide-react';
+import clsx from 'clsx';
 import { Collection, Environment, MessageType, BodyField, HeaderKV, MessageField, RunRequest } from '../lib/types';
 import { BodyEditor } from './BodyEditor';
 import { VariableAwareInput } from './VariableAwareInput';
@@ -37,20 +41,19 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   const [timeoutSeconds, setTimeoutSeconds] = useState(30);
   const [headers, setHeaders] = useState<HeaderKV[]>([]);
   const [body, setBody] = useState<BodyField[]>([]);
-  const [resolvedUrl, setResolvedUrl] = useState('');
   const [response, setResponse] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messageFields, setMessageFields] = useState<MessageField[]>([]);
   const [schema, setSchema] = useState<MessageSchemaMeta | null>(null);
+  const [activeLeftTab, setActiveLeftTab] = useState<'proto' | 'headers'>('proto');
+  const [showVariables, setShowVariables] = useState<boolean>(true);
+  const [isBodyCollapsed, setIsBodyCollapsed] = useState<boolean>(false);
 
   const runRequest = useRunRequest();
   const queryClient = useQueryClient();
-
-  // Track last seen requestId to avoid unnecessary clears on collection refetches
   const lastRequestIdRef = useRef<string | null>(null);
 
-  // Load request data when selected; clear only when requestId actually changes to empty
   useEffect(() => {
     const lastId = lastRequestIdRef.current;
 
@@ -62,21 +65,16 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         setUrl(request.url);
         setProtoMessage(request.protoMessage || '');
         setResponseType(request.responseType || '');
-        setErrorResponseType((request as any).errorResponseType || '');
+        setErrorResponseType(request.errorResponseType || '');
         setTimeoutSeconds(request.timeoutSeconds || 30);
         setHeaders(request.headers || []);
         setBody(request.body || []);
-        // Prefer server-stored last response if available, else fallback to localStorage
         if ((request as any).lastResponse) {
           setResponse((request as any).lastResponse);
         } else {
           try {
             const cached = localStorage.getItem(`requestResp:${requestId}`);
-            if (cached) {
-              setResponse(JSON.parse(cached));
-            } else {
-              setResponse(null);
-            }
+            setResponse(cached ? JSON.parse(cached) : null);
           } catch {
             setResponse(null);
           }
@@ -85,7 +83,6 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         return;
       }
     }
-    // New/unsaved request path: clear editor only on transition (when id actually changed)
     if (collection && !requestId && lastId !== requestId) {
       setRequestName('Untitled Request');
       setMethod('GET');
@@ -101,7 +98,6 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
       setResponse(null);
       lastRequestIdRef.current = requestId || null;
     }
-    // Also clear everything if no collection selected
     if (!collection) {
       setRequestName('Untitled Request');
       setMethod('GET');
@@ -118,25 +114,17 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     }
   }, [collection, requestId]);
 
-  // Helper
-  const isTimestamp = (field: MessageField) => !!(field.message && field.messageType && field.messageType.includes('google.protobuf.Timestamp'));
+  const isTimestamp = (f: MessageField) =>
+    !!(f.message && f.messageType && f.messageType.includes('google.protobuf.Timestamp'));
 
-  // Load message fields when proto message changes
   useEffect(() => {
     if (protoMessage) {
-      // Try advanced schema first; if unavailable, fall back to fields
       (async () => {
+        try { setSchema(await protoApi.getMessageSchema(protoMessage)); } catch { setSchema(null); }
         try {
-          const s = await protoApi.getMessageSchema(protoMessage);
-          setSchema(s);
-        } catch (e) {
-          setSchema(null);
-        }
-        try {
-          const response = await protoApi.getMessageFields(protoMessage);
-          setMessageFields(response.fields);
-        } catch (err) {
-          console.error('Failed to load message fields:', err);
+          const r = await protoApi.getMessageFields(protoMessage);
+          setMessageFields(r.fields);
+        } catch {
           setMessageFields([]);
         }
       })();
@@ -146,209 +134,141 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
     }
   }, [protoMessage]);
 
-  // Auto-generate body from proto on selection if body is empty
   useEffect(() => {
-    if (!protoMessage) return;
-    if (body && body.length > 0) return; // don't overwrite user content
-    if (!messageFields || messageFields.length === 0) return;
+    if (!protoMessage || (body && body.length > 0) || !messageFields.length) return;
 
-    // Build set of oneof member prefixes (like paymentMethod.details.cc)
     const oneofPrefixes = new Set<string>();
     messageFields.forEach((f) => {
       if ((f as any).oneof && f.message && (f.path || f.name)) {
-        const p = (f.path || f.name)!;
-        oneofPrefixes.add(p);
+        oneofPrefixes.add((f.path || f.name)!);
       }
     });
 
     const generatedFields: BodyField[] = messageFields
       .filter(f => !isTimestamp(f))
-      // Do not pre-generate any oneof member fields. They become visible only when selected.
       .filter(f => {
-        if ((f as any).oneof) return false; // direct member
+        if ((f as any).oneof) return false;
         const p = (f.path || f.name) || '';
-        // Skip leaves that live under any oneof member prefix
-        for (const pref of oneofPrefixes) {
-          if (p.startsWith(pref + '.')) return false;
-        }
+        for (const pref of oneofPrefixes) if (p.startsWith(pref + '.')) return false;
         return true;
       })
-      .map(field => ({
-        path: field.path || field.name,
-        value: getDefaultValueForField(field)
-      }));
+      .map(field => ({ path: field.path || field.name, value: getDefaultValueForField(field) }));
     setBody(generatedFields);
   }, [protoMessage, messageFields]);
 
-  // Manual generate button handler (overwrites current body)
   const handleGenerateFromProtoClick = (fields: MessageField[]) => {
-    if (!fields || fields.length === 0) return;
+    if (!fields?.length) return;
     const overwrite = body.length === 0 || window.confirm('Replace current body with fields from the selected proto?');
     if (!overwrite) return;
-    const oneofPrefixes2 = new Set<string>();
+
+    const oneofPrefixes = new Set<string>();
     fields.forEach((f) => {
       if ((f as any).oneof && f.message && (f.path || f.name)) {
-        const p = (f.path || f.name)!;
-        oneofPrefixes2.add(p);
+        oneofPrefixes.add((f.path || f.name)!);
       }
     });
 
     const generated: BodyField[] = fields
       .filter(f => !isTimestamp(f))
-      // Exclude oneof members from bulk generation
       .filter(f => {
         if ((f as any).oneof) return false;
         const p = (f.path || f.name) || '';
-        for (const pref of oneofPrefixes2) {
-          if (p.startsWith(pref + '.')) return false;
-        }
+        for (const pref of oneofPrefixes) if (p.startsWith(pref + '.')) return false;
         return true;
       })
-      .map(f => ({
-        path: f.path || f.name,
-        value: getDefaultValueForField(f),
-      }));
+      .map(f => ({ path: f.path || f.name, value: getDefaultValueForField(f) }));
     setBody(generated);
   };
 
-  // Get default value for a protobuf field
   const getDefaultValueForField = (field: MessageField): string => {
-    if (field.repeated) {
-      return '[]';
-    }
-
-    // Prefer enum default if available
+    if (field.repeated) return '[]';
     if ((field as any).enum && Array.isArray((field as any).enumValues)) {
       const opts = (field as any).enumValues as string[];
       return opts[0] || '';
     }
-
     const t = (field.type || '').toUpperCase();
-
     switch (t) {
-      case 'STRING':
-      case 'TYPE_STRING':
-        return '';
-      case 'INT32':
-      case 'INT64':
-      case 'UINT32':
-      case 'UINT64':
-      case 'SINT32':
-      case 'SINT64':
-      case 'FIXED32':
-      case 'FIXED64':
-      case 'SFIXED32':
-      case 'SFIXED64':
-      case 'TYPE_INT32':
-      case 'TYPE_INT64':
-      case 'TYPE_UINT32':
-      case 'TYPE_UINT64':
-      case 'TYPE_SINT32':
-      case 'TYPE_SINT64':
-      case 'TYPE_FIXED32':
-      case 'TYPE_FIXED64':
-      case 'TYPE_SFIXED32':
-      case 'TYPE_SFIXED64':
-        return '0';
-      case 'FLOAT':
-      case 'DOUBLE':
-      case 'TYPE_FLOAT':
-      case 'TYPE_DOUBLE':
-        return '0.0';
-      case 'BOOL':
-      case 'TYPE_BOOL':
-        return 'false';
-      case 'BYTES':
-      case 'TYPE_BYTES':
-        return '';
-      default:
-        // For nested messages or unknown kinds, use object placeholder
-        return field.message ? '{}' : '';
+      case 'STRING': case 'TYPE_STRING': return '';
+      case 'INT32': case 'INT64': case 'UINT32': case 'UINT64':
+      case 'SINT32': case 'SINT64': case 'FIXED32': case 'FIXED64':
+      case 'SFIXED32': case 'SFIXED64': case 'TYPE_INT32': case 'TYPE_INT64':
+      case 'TYPE_UINT32': case 'TYPE_UINT64': case 'TYPE_SINT32': case 'TYPE_SINT64':
+      case 'TYPE_FIXED32': case 'TYPE_FIXED64': case 'TYPE_SFIXED32': case 'TYPE_SFIXED64': return '0';
+      case 'FLOAT': case 'DOUBLE': case 'TYPE_FLOAT': case 'TYPE_DOUBLE': return '0.0';
+      case 'BOOL': case 'TYPE_BOOL': return 'false';
+      case 'BYTES': case 'TYPE_BYTES': return '';
+      default: return field.message ? '{}' : '';
     }
   };
 
-  // Update resolved URL when variables change (env overrides collection)
-  useEffect(() => {
-    let resolved = url || '';
-    const merged: Record<string, string> = {};
-    if (collection?.variables) Object.assign(merged, collection.variables);
-    if (environment?.variables) Object.assign(merged, environment.variables);
-    
-    Object.entries(merged).forEach(([k, v]) => {
-      resolved = resolved.replace(new RegExp(`{{${k}}}`, 'g'), v);
-    });
-    setResolvedUrl(resolved);
-  }, [url, environment, collection]);
+    // const resolvedUrl = React.useMemo(() => {
+  //   let resolved = url || '';
+  //   const merged: Record<string, string> = {};
+  //   if (collection?.variables) Object.assign(merged, collection.variables);
+  //   if (environment?.variables) Object.assign(merged, environment.variables);
+  //   Object.entries(merged).forEach(([k, v]) => { resolved = resolved.replace(new RegExp(`{{${k}}}`, 'g'), v); });
+  //   return resolved;
+  // }, [url, environment, collection]);
 
   const handleSend = async () => {
     if (!url.trim()) return;
-
     setIsLoading(true);
     setError(null);
     setResponse(null);
+    const startedAt = performance.now();
 
     try {
-      // Merge variables (environment overrides collection)
-      const variables: Record<string, string> = {};
-      if (collection?.variables) {
-        Object.assign(variables, collection.variables);
-      }
-      if (environment?.variables) {
-        Object.assign(variables, environment.variables);
-      }
-
-      // Convert headers to map
+      const variables: Record<string, string> = { ...(collection?.variables || {}), ...(environment?.variables || {}) };
       const headersMap: Record<string, string> = {};
-      headers.forEach(header => {
-        if (header.key.trim()) {
-          headersMap[header.key.trim()] = header.value;
-        }
-      });
+      headers.forEach(h => { if (h.key.trim()) headersMap[h.key.trim()] = h.value; });
 
-      // Merge saved request body (if any) with in-editor changes so unchanged fields are also sent
       let effectiveBody = body;
       if (collection?.requests && requestId) {
         const saved = collection.requests.find(r => r.id === requestId);
-        if (saved && Array.isArray(saved.body)) {
+        if (saved?.body?.length) {
           const merged: Record<string, any> = {};
-          // seed with saved
           saved.body.forEach((b) => { if (b.path) merged[b.path] = b.value; });
-          // overlay edits
           body.forEach((b) => { if (b.path) merged[b.path] = b.value; });
           effectiveBody = Object.entries(merged).map(([path, value]) => ({ path, value }));
         }
       }
 
       const requestData: RunRequest = {
-        method,
-        url,
-        protoMessage: protoMessage || undefined,
+        method, url, protoMessage: protoMessage || undefined,
         responseType: responseType || undefined,
         errorResponseType: errorResponseType || undefined,
-        headers: headersMap,
-        body: effectiveBody,
-        timeoutSeconds,
-        variables
+        headers: headersMap, body: effectiveBody, timeoutSeconds, variables
       } as any;
 
-      try { console.log('Sending body fields:', effectiveBody); } catch {}
-      // Attach identifiers for backend persistence when available
       (requestData as any).collectionId = collection?.id || undefined;
       (requestData as any).requestId = requestId || undefined;
 
       const resp = await runRequest.mutateAsync(requestData);
       setResponse(resp);
-      // Cache last response
+
+      try {
+        const durationMs = Math.round(performance.now() - startedAt);
+        let sizeBytes: number | undefined;
+        if (typeof (resp as any)?.raw === 'string') sizeBytes = new TextEncoder().encode((resp as any).raw).length;
+        else if (typeof (resp as any)?.decoded === 'string') sizeBytes = new TextEncoder().encode((resp as any).decoded).length;
+        else if ((resp as any)?.headers) {
+          const headers: Record<string, string> = (resp as any).headers || {};
+          const key = Object.keys(headers).find(k => k.toLowerCase() === 'content-length');
+          if (key) {
+            const val = parseInt(headers[key], 10);
+            if (!Number.isNaN(val)) sizeBytes = val;
+          }
+        }
+        (resp as any).__meta = { durationMs, sizeBytes };
+      } catch {}
+
       if (requestId) {
         try { localStorage.setItem(`requestResp:${requestId}`, JSON.stringify(resp)); } catch {}
       }
       onRequestRun(resp);
-      // Do NOT invalidate collections here; refetch would rehydrate editor from saved
-      // request and overwrite unsaved in-editor changes (e.g., firstName).
-      // Collections will refresh on explicit save or navigation.
-    } catch (error) {
-      console.error('Failed to run request:', error);
-      setError(error instanceof Error ? error.message : 'Request failed');
+    } catch (err) {
+      console.error('Failed to run request:', err);
+      setError(err instanceof Error ? err.message : 'Request failed');
     } finally {
       setIsLoading(false);
     }
@@ -356,19 +276,11 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
 
   const handleSave = async () => {
     if (!collection) return;
-
     try {
-      // Convert headers to map for payload
       const headersMap: Record<string, any> = {};
-      headers.forEach(h => {
-        if (h.key.trim()) headersMap[h.key.trim()] = h.value;
-      });
-
+      headers.forEach(h => { if (h.key.trim()) headersMap[h.key.trim()] = h.value; });
       const bodyModel: Record<string, any> = {};
-      // Flatten BodyField[] into a simple object; keep as a map of path->value
-      body.forEach(b => {
-        if (b.path) bodyModel[b.path] = b.value;
-      });
+      body.forEach(b => { if (b.path) bodyModel[b.path] = b.value; });
 
       const payload = {
         collection: collection.id ? { id: collection.id } : { name: collection.name, description: (collection as any).description },
@@ -387,24 +299,20 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
       };
 
       const saved = await saveRequestApi(payload as any);
-      // If this was a newly created request and we have a current response, cache it under the new id
-      if (!requestId && saved && (saved as any).request && (saved as any).request.id && response) {
+      if (!requestId && (saved as any)?.request?.id && response) {
         try { localStorage.setItem(`requestResp:${(saved as any).request.id}`, JSON.stringify(response)); } catch {}
       }
-      // Immediately refresh collections so the sidebar shows the saved request
       queryClient.invalidateQueries('collections');
-      if (collection.id) {
-        queryClient.invalidateQueries(['collection', collection.id]);
-      }
-    } catch (error) {
-      console.error('Failed to save request:', error);
+      if (collection.id) queryClient.invalidateQueries(['collection', collection.id]);
+    } catch (e) {
+      console.error('Failed to save request:', e);
     }
   };
 
   if (!collection) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <div className="text-center text-gray-500">
+      <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center text-gray-500 dark:text-gray-300">
           <p className="text-lg">Select a collection to get started</p>
           <p className="text-sm">Or create a new collection to begin</p>
         </div>
@@ -413,61 +321,64 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-white">
-      {/* Request Header */}
-      <div className="border-b border-gray-200 p-4">
-        <div className="flex items-center space-x-4">
-          {/* Request Name */}
-          <input
-            type="text"
-            value={requestName}
-            onChange={(e) => setRequestName(e.target.value)}
-            placeholder="Request name"
-            className="w-56 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          />
-
-          {/* Method Selector */}
-          <div className="w-28">
-            <Dropdown
-              options={['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].map(m => ({ label: m, value: m }))}
-              value={method}
-              onChange={setMethod}
+    <div className="flex-1 flex flex-col bg-white dark:bg-gray-800 dark:text-white">
+      {/* Header */}
+      <div className="border-b border-gray-200 dark:border-gray-700 p-4 pb-[9px] relative z-40">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <input
+              type="text"
+              value={requestName}
+              onChange={(e) => setRequestName(e.target.value)}
+              placeholder="Request name"
+              className="w-64 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
-          </div>
-
-          {/* URL Input */}
-          <div className="flex-1">
-            <VariableAwareInput
-              value={url}
-              onChange={(e) => setUrl((e.target as HTMLInputElement).value)}
-              placeholder="Enter URL (supports {{variables}})"
-              variables={{
-                ...(collection?.variables || {}),
-                ...(environment?.variables || {}),
-              }}
-            />
-          </div>
-
-          {/* Resolved URL Preview */}
-          {resolvedUrl !== url && (
-            <div className="flex items-center space-x-2 text-xs text-gray-500">
-              <Eye className="h-4 w-4" />
-              <span className="font-mono bg-gray-100 px-2 py-1 rounded">
-                {resolvedUrl}
-              </span>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex space-x-2">
             <button
               onClick={handleSave}
               disabled={!collection}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors disabled:opacity-50"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors disabled:opacity-50"
             >
-              <Save className="h-4 w-4 mr-2" />
-              {'Save'}
+              <Save className="h-4 w-4 mr-2" /> Save
             </button>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <div className="w-28">
+              <Dropdown
+                options={['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].map(m => ({ label: m, value: m }))}
+                value={method}
+                onChange={setMethod}
+                labelClassName={
+                  method === 'GET' ? 'text-green-600 dark:text-green-400' :
+                  method === 'POST' ? 'text-blue-600 dark:text-blue-400' :
+                  method === 'PUT' ? 'text-amber-600 dark:text-amber-400' :
+                  method === 'PATCH' ? 'text-yellow-600 dark:text-yellow-400' :
+                  method === 'DELETE' ? 'text-red-600 dark:text-red-400' :
+                  method === 'HEAD' ? 'text-purple-600 dark:text-purple-400' :
+                  method === 'OPTIONS' ? 'text-cyan-600 dark:text-cyan-400' :
+                  undefined
+                }
+                itemClassNameFn={(opt) => (
+                  opt.value === 'GET' ? 'text-green-600 dark:text-green-400' :
+                  opt.value === 'POST' ? 'text-blue-600 dark:text-blue-400' :
+                  opt.value === 'PUT' ? 'text-amber-600 dark:text-amber-400' :
+                  opt.value === 'PATCH' ? 'text-yellow-600 dark:text-yellow-400' :
+                  opt.value === 'DELETE' ? 'text-red-600 dark:text-red-400' :
+                  opt.value === 'HEAD' ? 'text-purple-600 dark:text-purple-400' :
+                  opt.value === 'OPTIONS' ? 'text-cyan-600 dark:text-cyan-400' :
+                  'text-gray-700 dark:text-gray-200'
+                )}
+              />
+            </div>
+            <div className="flex-1">
+              <VariableAwareInput
+                value={url}
+                onChange={(e) => setUrl((e.target as HTMLInputElement).value)}
+                placeholder="Enter the request URL— variables are allowed with {{name}}"
+                variables={{ ...(collection?.variables || {}), ...(environment?.variables || {}) }}
+                showExplainButton
+              />
+            </div>
             <button
               onClick={handleSend}
               disabled={runRequest.isLoading || !url.trim()}
@@ -480,111 +391,189 @@ export const RequestEditor: React.FC<RequestEditorProps> = ({
         </div>
       </div>
 
-      {/* Request Configuration */}
+      {/* Main */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Headers, Body, etc. */}
-        <div className="flex-1 flex flex-col border-r border-gray-200">
-          {/* Protobuf Configuration */}
-          <div className="border-b border-gray-200 p-4">
-            <h3 className="text-sm font-medium text-gray-900 mb-3">Protobuf Configuration</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Request Message Type
-                </label>
-                <Dropdown
-                  options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
-                  value={protoMessage}
-                  onChange={setProtoMessage}
-                  placeholder="Select message type"
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Success Response Message Type
-                </label>
-                <Dropdown
-                  options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
-                  value={responseType}
-                  onChange={setResponseType}
-                  placeholder="Select message type"
-                  className="w-full"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Error Response Message Type
-                </label>
-                <Dropdown
-                  options={messageTypes.map((msg) => ({ label: msg.fqName, value: msg.fqName }))}
-                  value={errorResponseType}
-                  onChange={setErrorResponseType}
-                  placeholder="Select message type"
-                  className="w-full"
-                />
-              </div>
-            </div>
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Tabs */}
+          <div className="px-4 pt-2 mt-3 border-b border-gray-200 dark:border-gray-700">
+            <nav className="flex space-x-6">
+              <button
+                type="button"
+                onClick={() => setActiveLeftTab('proto')}
+                className={clsx(
+                  'pb-3 inline-flex items-center text-sm font-medium border-b-2',
+                  activeLeftTab === 'proto'
+                    ? 'border-primary-600 text-primary-600 dark:text-white'
+                    : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
+                )}
+              >
+                <Code2 className="h-4 w-4 mr-2" /> Protobuf Configuration
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveLeftTab('headers')}
+                className={clsx(
+                  'pb-3 inline-flex items-center text-sm font-medium border-b-2',
+                  activeLeftTab === 'headers'
+                    ? 'border-primary-600 text-primary-600 dark:text-white'
+                    : 'border-transparent text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:border-gray-300'
+                )}
+              >
+                <List className="h-4 w-4 mr-2" /> Headers
+              </button>
+            </nav>
           </div>
 
-          {/* Headers */}
-          <div className="p-4">
-            <HeadersEditor headers={headers} onChange={setHeaders} variables={{
-              ...(collection?.variables || {}),
-              ...(environment?.variables || {}),
-            }} />
+          {/* Tab content */}
+          <div className="px-4 py-3">
+            {activeLeftTab === 'proto' ? (
+              <div className="space-y-3">
+                {/* Request */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Request Message Type
+                  </label>
+                  <div className="col-span-3">
+                    <Dropdown
+                      options={messageTypes.map((m) => ({ label: m.fqName, value: m.fqName }))}
+                      value={protoMessage}
+                      onChange={setProtoMessage}
+                      placeholder="Select message type"
+                      className="w-full"
+                      searchable
+                      searchPlaceholder="Search message types..."
+                    />
+                  </div>
+                </div>
+
+                {/* Success */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Success Response Message Type
+                  </label>
+                  <div className="col-span-3">
+                    <Dropdown
+                      options={messageTypes.map((m) => ({ label: m.fqName, value: m.fqName }))}
+                      value={responseType}
+                      onChange={setResponseType}
+                      placeholder="Select message type"
+                      className="w-full"
+                      searchable
+                      searchPlaceholder="Search message types..."
+                    />
+                  </div>
+                </div>
+
+                {/* Error */}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Error Response Message Type
+                  </label>
+                  <div className="col-span-3">
+                    <Dropdown
+                      options={messageTypes.map((m) => ({ label: m.fqName, value: m.fqName }))}
+                      value={errorResponseType}
+                      onChange={setErrorResponseType}
+                      placeholder="Select message type"
+                      className="w-full"
+                      searchable
+                      searchPlaceholder="Search message types..."
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <HeadersEditor
+                headers={headers}
+                onChange={setHeaders}
+                variables={{ ...(collection?.variables || {}), ...(environment?.variables || {}) }}
+              />
+            )}
           </div>
 
           {/* Body */}
           {(method !== 'GET' || protoMessage) && (
-            <div className="p-4 border-t border-gray-200">
-              {messageFields && messageFields.length > 0 ? (
-                <NestedBodyEditor
-                  fields={messageFields}
-                  values={body}
-                  onChange={setBody}
-                  // Pass schema for oneof and cardinality awareness
-                  // @ts-ignore - component currently accepts props defined below
-                  schema={schema || undefined}
-                />
-              ) : (
-                <BodyEditor
-                  body={body}
-                  onChange={setBody}
-                  protoMessage={protoMessage}
-                  messageFields={messageFields}
-                  onGenerateFromProto={handleGenerateFromProtoClick}
-                />
+            <div className={clsx('border-t border-gray-200 dark:border-gray-700', isBodyCollapsed ? 'px-4 pt-4 pb-4' : 'p-4')}>
+              <button
+                type="button"
+                onClick={() => setIsBodyCollapsed(v => !v)}
+                aria-expanded={!isBodyCollapsed}
+                className={clsx('w-full flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-700/40 rounded px-1.5 py-0', isBodyCollapsed ? 'mb-0' : 'mb-2')}
+              >
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white">Request Body</h3>
+                <span className="inline-flex items-center text-xs text-gray-500 dark:text-gray-300">
+                  {isBodyCollapsed ? (<><ChevronRight className="h-4 w-4 mr-1" /> Expand</>) : (<><ChevronDown className="h-4 w-4 mr-1" /> Collapse</>)}
+                </span>
+              </button>
+              {!isBodyCollapsed && (
+                <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md overflow-auto max-h-96">
+                  {messageFields?.length ? (
+                    <NestedBodyEditor fields={messageFields} values={body} onChange={setBody} // @ts-ignore
+                      schema={schema || undefined}
+                    />
+                  ) : (
+                    <BodyEditor
+                      body={body}
+                      onChange={setBody}
+                      protoMessage={protoMessage}
+                      messageFields={messageFields}
+                      onGenerateFromProto={handleGenerateFromProtoClick}
+                      showHeader={false}
+                    />
+                  )}
+                </div>
               )}
             </div>
           )}
+
+          {/* Response */}
+          <div className={clsx('border-t border-gray-200 dark:border-gray-700', isBodyCollapsed ? 'mt-0' : 'mt-2')}>
+            <ResponsePanel
+              response={response}
+              isLoading={isLoading}
+              error={error || undefined}
+              durationMs={(response as any)?.__meta?.durationMs}
+              sizeBytes={(response as any)?.__meta?.sizeBytes}
+            />
+          </div>
         </div>
 
-        {/* Right Panel - Variables/Preview */}
-        <div className="w-80 p-4 bg-gray-50">
-          <VariablesPreview 
-            collection={collection}
-            environment={environment}
-            url={url}
-            headers={headers}
-            body={body}
-            showResolvedBody={false}
-            variablesOverride={(environment?.variables || collection?.variables) ? {
-              ...(collection?.variables || {}),
-              ...(environment?.variables || {}),
-            } : undefined}
-          />
-        </div>
-
-      </div>
-
-      {/* Response Panel */}
-      <div className="border-t border-gray-200 h-96">
-        <ResponsePanel
-          response={response}
-          isLoading={isLoading}
-          error={error || undefined}
-        />
+        {/* Variables Drawer */}
+        <aside
+          className={clsx(
+            'overflow-hidden transition-all duration-300 bg-gray-50 dark:bg-gray-900 dark:text-white border-l border-gray-200 dark:border-gray-700 flex flex-col',
+            showVariables ? 'w-80' : 'w-10'
+          )}
+          aria-label="Variables preview drawer"
+        >
+          {showVariables ? (
+            <>
+              <div className="p-4 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-sm font-medium">Variables Preview</h2>
+                <button type="button" className="px-2 py-1 text-xs rounded hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setShowVariables(false)}>
+                  Close
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto flex-1">
+                <VariablesPreview
+                  collection={collection}
+                  environment={environment}
+                  url={url}
+                  headers={headers}
+                  body={body}
+                  showResolvedBody={false}
+                  variablesOverride={(environment?.variables || collection?.variables) ? { ...(collection?.variables || {}), ...(environment?.variables || {}) } : undefined}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="p-2">
+              <button type="button" className="rounded hover:bg-gray-100 dark:hover:bg-gray-700" onClick={() => setShowVariables(true)} title="Open Variables Preview">
+                <span className="font-mono text-lg text-gray-600 dark:text-gray-300">{`{}`}</span>
+              </button>
+            </div>
+          )}
+        </aside>
       </div>
     </div>
   );

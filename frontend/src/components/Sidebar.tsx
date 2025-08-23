@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Folder, FileText, Plus, Trash2, Globe, Pencil, Archive } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FileText, Plus, Trash2, Pencil, Archive } from 'lucide-react';
 import { Collection, Environment } from '../lib/types';
 import { useCreateCollection, useDeleteCollection, useDeleteRequest, useCreateEnvironment, useUpdateEnvironment, useDeleteEnvironment, useUpdateCollection } from '../lib/useData';
 import { EnvironmentModal } from './EnvironmentModal';
@@ -15,6 +15,7 @@ interface SidebarProps {
   onCollectionSelect: (collection: Collection | null) => void;
   environments?: Environment[];
   onEnvironmentCreated?: (name: string) => void;
+  onCollapse?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -23,8 +24,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedRequest,
   onRequestSelect,
   onCollectionSelect,
-  environments = [],
+
   onEnvironmentCreated,
+  onCollapse,
 }) => {
   const [expandedCollections, setExpandedCollections] = useState<Set<string>>(new Set());
   const [showCreateCollection, setShowCreateCollection] = useState(false);
@@ -107,16 +109,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+      <div className="w-full min-h-screen bg-white dark:bg-gray-800 flex flex-col text-gray-900 dark:text-white transition-all duration-300">
         {/* Header */}
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center text-lg font-semibold text-gray-900">
-              <Archive className="h-5 w-5 mr-2 text-gray-500" /> Collections
+        <div className="p-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-0">
+            <div className="flex items-center text-lg font-semibold text-gray-900 dark:text-white">
+              <button
+                type="button"
+                onClick={() => onCollapse && onCollapse()}
+                className="p-1 mr-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                title="Collapse sidebar"
+              >
+                <Archive className="h-5 w-5 text-gray-500 dark:text-gray-300" />
+              </button>
+              Collections
             </div>
             <button
               onClick={() => setShowCreateCollection(true)}
-              className="inline-flex items-center p-2 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-md transition-colors"
+              className="inline-flex items-center p-2 text-sm rounded-md transition-colors text-gray-600 dark:text-gray-100 hover:text-primary-600 dark:hover:text-white hover:bg-primary-50/20 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-primary-500/60"
             >
               <Plus className="h-4 w-4" />
             </button>
@@ -146,8 +156,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div
                       className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${
                         isSelected 
-                          ? 'bg-primary-50 text-primary-700 border border-primary-200' 
-                          : 'hover:bg-gray-50'
+                          ? 'bg-gray-50 text-gray-900 border border-gray-200 dark:bg-gray-700/40 dark:text-white dark:border-gray-600' 
+                          : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
                       }`}
                       onClick={() => onCollectionSelect(collection)}
                     >
@@ -157,7 +167,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             e.stopPropagation();
                             toggleCollection(collection.id);
                           }}
-                          className="p-1 hover:bg-gray-200 rounded transition-colors"
+                          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors focus:bg-gray-100 dark:focus:bg-gray-700/60"
                         >
                           {isExpanded ? (
                             <ChevronDown className="h-4 w-4" />
@@ -168,7 +178,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <Folder className="h-4 w-4 text-gray-500" />
                         <span className="text-sm font-medium truncate">{collection.name}</span>
                         {collection.requests.length > 0 && (
-                          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
+                          <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">
                             {collection.requests.length}
                           </span>
                         )}
@@ -180,7 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             e.stopPropagation();
                             handleCreateRequest(collection.id);
                           }}
-                          className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                          className="p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus:bg-primary-50 dark:focus:bg-primary-900/30 rounded transition-colors"
                           title="Add Request"
                         >
                           <Plus className="h-3 w-3" />
@@ -190,7 +200,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             e.stopPropagation();
                             setEditingCollectionId(collection.id);
                           }}
-                          className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                          className="p-1 text-gray-400 hover:text-primary-600 dark:hover:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus:bg-primary-50 dark:focus:bg-primary-900/30 rounded transition-colors"
                           title="Edit Collection"
                         >
                           <Pencil className="h-3 w-3" />
@@ -200,7 +210,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             e.stopPropagation();
                             handleCollectionDelete(collection.id);
                           }}
-                          className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 focus:bg-red-50 dark:focus:bg-red-900/30 rounded transition-colors"
                           title="Delete Collection"
                         >
                           <Trash2 className="h-3 w-3" />
@@ -216,15 +226,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             key={request.id}
                             className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${
                               selectedRequest === request.id 
-                                ? 'bg-primary-100 text-primary-700' 
-                                : 'hover:bg-gray-50'
+                                ? 'bg-gray-50 text-gray-900 dark:bg-gray-700/40 dark:text-white' 
+                                : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
                             }`}
                             onClick={() => onRequestSelect(collection.id, request.id)}
                           >
                             <div className="flex items-center space-x-2 flex-1">
                               <FileText className="h-3 w-3 text-gray-400" />
                               <span className="text-sm truncate">{request.name}</span>
-                              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded bg-gray-50 dark:bg-gray-700/40 ${
+                                  request.method === 'GET' ? 'text-green-600 dark:text-green-400' :
+                                  request.method === 'POST' ? 'text-blue-600 dark:text-blue-400' :
+                                  request.method === 'PUT' ? 'text-amber-600 dark:text-amber-400' :
+                                  request.method === 'PATCH' ? 'text-yellow-600 dark:text-yellow-400' :
+                                  request.method === 'DELETE' ? 'text-red-600 dark:text-red-400' :
+                                  request.method === 'HEAD' ? 'text-purple-600 dark:text-purple-400' :
+                                  request.method === 'OPTIONS' ? 'text-cyan-600 dark:text-cyan-400' :
+                                  'text-gray-500 dark:text-gray-300'
+                                }`}
+                              >
                                 {request.method}
                               </span>
                             </div>
@@ -233,7 +254,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 e.stopPropagation();
                                 handleRequestDelete(collection.id, request.id);
                               }}
-                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 focus:bg-red-50 dark:focus:bg-red-900/30 rounded transition-colors opacity-0 group-hover:opacity-100 transition-opacity"
                               title="Delete Request"
                             >
                               <Trash2 className="h-3 w-3" />
@@ -247,55 +268,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               })}
             </div>
           )}
-          {/* Environments section moved below collections */}
-          <div className="p-4 border-t border-gray-200 mt-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center text-lg font-semibold text-gray-900">
-                <Globe className="h-5 w-5 mr-2 text-gray-500" /> Environments
-              </div>
-              <button
-                className="inline-flex items-center p-1 text-xs font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-md"
-                title="Add Environment"
-                onClick={() => setShowEnvModal(true)}
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-            {/* List environments */}
-            <div className="mt-2 space-y-1">
-              {(environments || []).length === 0 ? (
-                <div className="text-xs text-gray-500">No environments yet. Use + to create.</div>
-              ) : (
-                (environments || []).map((env) => (
-                  <div key={env.name} className="group flex items-center justify-between px-2 py-1 rounded hover:bg-gray-50">
-                    <div className="text-sm text-gray-800 truncate">{env.name}</div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded"
-                        title="Edit Environment"
-                        onClick={() => {
-                          setEditingEnv(env);
-                          setShowEnvModal(true);
-                        }}
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                      <button
-                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                        title="Delete Environment"
-                        onClick={async () => {
-                          if (!confirm(`Delete environment "${env.name}"?`)) return;
-                          await deleteEnvironment.mutateAsync(env.name);
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          
         </div>
       </div>
 

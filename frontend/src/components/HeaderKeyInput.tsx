@@ -18,16 +18,17 @@ export const HeaderKeyInput: React.FC<HeaderKeyInputProps> = ({
   containerClassName,
 }) => {
   const [open, setOpen] = useState(false);
-  const [highlightIndex, setHighlightIndex] = useState<number>(-1);
+  const [highlightIndex, setHighlightIndex] = useState<number>(-1); // keyboard highlight only
+  const [usingKeyboard, setUsingKeyboard] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const filtered = useMemo(() => {
     const q = (value || '').toLowerCase();
-    if (!q) return suggestions.slice(0, 8);
+    if (!q) return suggestions; // show all; scroll container
     const starts = suggestions.filter((s) => s.toLowerCase().startsWith(q));
     const contains = suggestions.filter((s) => !s.toLowerCase().startsWith(q) && s.toLowerCase().includes(q));
-    return [...starts, ...contains].slice(0, 8);
+    return [...starts, ...contains];
   }, [value, suggestions]);
 
   useEffect(() => {
@@ -36,6 +37,7 @@ export const HeaderKeyInput: React.FC<HeaderKeyInputProps> = ({
       if (!containerRef.current.contains(e.target as Node)) {
         setOpen(false);
         setHighlightIndex(-1);
+        setUsingKeyboard(false);
       }
     }
     document.addEventListener('mousedown', onDocClick);
@@ -46,11 +48,13 @@ export const HeaderKeyInput: React.FC<HeaderKeyInputProps> = ({
     onChange(val);
     setOpen(false);
     setHighlightIndex(-1);
-    // re-focus input for quick editing
+    setUsingKeyboard(false);
     inputRef.current?.focus();
   };
 
   const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+    setUsingKeyboard(true);
+
     if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
       setOpen(true);
       return;
@@ -59,16 +63,10 @@ export const HeaderKeyInput: React.FC<HeaderKeyInputProps> = ({
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightIndex((i) => {
-        const next = i + 1;
-        return next >= filtered.length ? 0 : next;
-      });
+      setHighlightIndex((i) => (i + 1 >= filtered.length ? 0 : i + 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setHighlightIndex((i) => {
-        const next = i - 1;
-        return next < 0 ? Math.max(filtered.length - 1, 0) : next;
-      });
+      setHighlightIndex((i) => (i - 1 < 0 ? Math.max(filtered.length - 1, 0) : i - 1));
     } else if (e.key === 'Enter' || e.key === 'Tab') {
       if (highlightIndex >= 0 && filtered[highlightIndex]) {
         e.preventDefault();
@@ -77,11 +75,16 @@ export const HeaderKeyInput: React.FC<HeaderKeyInputProps> = ({
     } else if (e.key === 'Escape') {
       setOpen(false);
       setHighlightIndex(-1);
+      setUsingKeyboard(false);
     }
   };
 
   return (
-    <div ref={containerRef} className={`relative w-full ${containerClassName || ''}`}>
+    <div
+      ref={containerRef}
+      className={`relative w-full ${containerClassName || ''}`}
+      onMouseMove={() => usingKeyboard && setUsingKeyboard(false)}
+    >
       <input
         ref={inputRef}
         type="text"
@@ -98,29 +101,36 @@ export const HeaderKeyInput: React.FC<HeaderKeyInputProps> = ({
         aria-expanded={open}
         aria-controls="header-key-suggestions-popup"
       />
+
       {open && filtered.length > 0 && (
         <div
           id="header-key-suggestions-popup"
           role="listbox"
-          className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg"
+          className="absolute z-10 mt-1 max-h-80 w-full overflow-auto rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg"
         >
-          {filtered.map((s, i) => (
-            <div
-              key={s}
-              role="option"
-              aria-selected={highlightIndex === i}
-              onMouseEnter={() => setHighlightIndex(i)}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => commit(s)}
-              className={`px-3 py-2 text-sm cursor-pointer ${highlightIndex === i ? 'bg-primary-50 text-primary-700' : 'hover:bg-gray-50'}`}
-            >
-              {s}
-            </div>
-          ))}
+          {filtered.map((s, i) => {
+            const isKbActive = usingKeyboard && highlightIndex === i;
+            const isSelected = value === s;
+            return (
+              <div
+                key={s}
+                role="option"
+                aria-selected={isKbActive}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => commit(s)}
+                className={[
+                  'px-3 py-2 text-sm cursor-pointer transition-colors duration-100',
+                  // keyboard highlight matches hover (no dark band)
+                  isKbActive ? 'bg-gray-50 dark:bg-gray-700/40' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40',
+                  isSelected && 'font-medium',
+                ].join(' ')}
+              >
+                {s}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 };
-
-

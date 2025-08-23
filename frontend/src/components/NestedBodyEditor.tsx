@@ -164,7 +164,7 @@ const NodeRenderer: React.FC<{
     const v = valueMap[node.fullPath] ?? '';
     return (
       <div className="flex items-center space-x-3 py-1" style={{ marginLeft: level * 16 }}>
-        <label className="w-64 text-sm text-gray-700">{node.name}</label>
+        <label className="w-64 text-sm text-gray-700 dark:text-gray-300">{node.name}</label>
         <div className="flex-1">
           <FieldInput
             field={node.field}
@@ -346,12 +346,12 @@ const NodeRenderer: React.FC<{
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center px-1.5 py-1 text-left hover:bg-gray-50"
+        className="w-full flex items-center px-1.5 py-1 text-left hover:bg-gray-50 dark:hover:bg-gray-700/40"
       >
-        {open ? <ChevronDown className="h-4 w-4 mr-1 text-gray-500" /> : <ChevronRight className="h-4 w-4 mr-1 text-gray-500" />}
-        <span className="text-sm font-medium text-gray-900">{node.name}</span>
+        {open ? <ChevronDown className="h-4 w-4 mr-1 text-gray-500 dark:text-gray-300" /> : <ChevronRight className="h-4 w-4 mr-1 text-gray-500 dark:text-gray-300" />}
+        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{node.name}</span>
         {oneofInfo && (
-          <span className="ml-2 text-xs text-gray-500">
+          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
             (oneof - {oneofInfo.controllerValue || `select ${oneofInfo.controllerKey}`})
           </span>
         )}
@@ -370,14 +370,14 @@ const NodeRenderer: React.FC<{
             />
           ))}
           {oneofInfo && !oneofInfo.controllerValue && (
-            <div className="text-xs text-gray-500 italic py-1">
+            <div className="text-xs text-gray-500 dark:text-gray-400 italic py-1">
               Select a {oneofInfo.controllerKey} above to see available fields
             </div>
           )}
           {oneofInfo && oneofInfo.controllerValue && visibleEntries.filter(([key]) => 
             oneofInfo.messageFields.some((mf: { key: string }) => mf.key === key)
           ).length === 0 && (
-            <div className="text-xs text-gray-500 italic py-1">
+            <div className="text-xs text-gray-500 dark:text-gray-400 italic py-1">
               No fields available for {oneofInfo.controllerValue}
             </div>
           )}
@@ -395,10 +395,6 @@ export const NestedBodyEditor: React.FC<NestedBodyEditorProps> = ({ fields, valu
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900">Request Body</h3>
-      </div>
-
       {rootChildren.length === 0 ? (
         <div className="text-center py-4 text-gray-500 text-sm">No fields available for this message</div>
       ) : (

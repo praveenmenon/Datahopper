@@ -5,12 +5,16 @@ import { RequestEditor } from './components/RequestEditor';
 import { useCollections, useEnvironments, useMessageTypes } from './lib/useData';
 import { preferencesApi } from './lib/api';
 import { Collection } from './lib/types';
+import { Archive } from 'lucide-react';
 
 function App() {
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<string | null>(null);
   const [activeEnvironment, setActiveEnvironment] = useState<string>('');
   const [hasRestoredEnv, setHasRestoredEnv] = useState<boolean>(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(320); // px
+  const [isResizing, setIsResizing] = useState<boolean>(false);
 
   // Data fetching
   const { data: collections = [], isLoading: collectionsLoading } = useCollections();
@@ -21,26 +25,20 @@ function App() {
 
   // Restore previously selected environment on first load (backend pref first, then local)
   useEffect(() => {
+    if (environmentsLoading) return; // wait until envs are loaded to avoid defaulting early
     (async () => {
-      // Prefer backend preference when available; fallback to localStorage
+      let candidate = '';
       try {
         const pref = await preferencesApi.get();
-        const fromBackend = pref?.activeEnvironment;
-        const candidate = fromBackend || localStorage.getItem('activeEnvironment') || '';
-        if (candidate && !environmentsLoading && environments.length > 0) {
-          if (environments.find(e => e.name === candidate)) {
-            setActiveEnvironment(candidate);
-          }
-        }
+        const fromBackend = pref?.activeEnvironment as string | undefined;
+        candidate = fromBackend || localStorage.getItem('activeEnvironment') || '';
       } catch {
-        const stored = localStorage.getItem('activeEnvironment');
-        if (stored && !environmentsLoading && environments.length > 0) {
-          if (environments.find(e => e.name === stored)) {
-            setActiveEnvironment(stored);
-          }
-        }
+        candidate = localStorage.getItem('activeEnvironment') || '';
       }
-      // Mark restore complete so downstream effects can run safely
+              if (candidate && environments.length > 0 && environments.find(env => env.name === candidate)) {
+        setActiveEnvironment(candidate);
+      }
+      // Mark restore complete only after we have considered preferences/local and envs are available
       setHasRestoredEnv(true);
     })();
   }, [environmentsLoading, environments]);
@@ -61,16 +59,15 @@ function App() {
   // If the stored/active environment no longer exists, clear it.
   // After restore finishes, if nothing is set, default to first environment.
   useEffect(() => {
-    if (!environmentsLoading) {
-      if (activeEnvironment && !environments.find(e => e.name === activeEnvironment)) {
-        setActiveEnvironment('');
-      }
-      // If no environment is selected and there are environments available, select the first one
-      if (hasRestoredEnv && !activeEnvironment && environments.length > 0) {
-        const first = environments[0].name;
-        setActiveEnvironment(first);
-        try { preferencesApi.update({ activeEnvironment: first }); } catch {}
-      }
+    if (environmentsLoading) return;
+            if (activeEnvironment && !environments.find(env => env.name === activeEnvironment)) {
+      setActiveEnvironment('');
+    }
+    // If nothing restored and nothing in localStorage, default to first env
+    if (hasRestoredEnv && !activeEnvironment && environments.length > 0 && !localStorage.getItem('activeEnvironment')) {
+      const first = environments[0].name;
+      setActiveEnvironment(first);
+      try { preferencesApi.update({ activeEnvironment: first }); } catch {}
     }
   }, [environmentsLoading, environments, activeEnvironment, hasRestoredEnv]);
 
@@ -98,17 +95,17 @@ function App() {
 
   if (collectionsLoading || environmentsLoading || messageTypesLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-800 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading DataHopper...</p>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading DataHopper...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-800 dark:text-white flex flex-col">
       <TopBar 
         environments={environments}
         activeEnvironment={activeEnvironment}
@@ -121,16 +118,58 @@ function App() {
         showEnvironmentSelector={hasRestoredEnv}
       />
       
-      <div className="flex h-screen pt-16">
-          <Sidebar 
-          collections={collections}
-          selectedCollection={selectedCollection}
-          selectedRequest={selectedRequest}
-          onRequestSelect={handleRequestSelect}
-          onCollectionSelect={setSelectedCollection}
-          environments={environments}
-          onEnvironmentCreated={(name) => { setActiveEnvironment(name); localStorage.setItem('activeEnvironment', name); }}
-        />
+      <div className={`flex flex-1 pt-16 pb-10 ${isResizing ? 'select-none cursor-col-resize' : ''}`}>
+        <div
+          className={`relative transition-[width] duration-150`}
+          id="sidebar-width-wrapper"
+          style={{ width: sidebarCollapsed ? 48 : sidebarWidth, minWidth: sidebarCollapsed ? 48 : 200, maxWidth: 600 }}
+        >
+          {sidebarCollapsed ? (
+            <div className="h-full flex items-start justify-center py-3">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(false)}
+                className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                title="Expand sidebar"
+              >
+                <Archive className="h-5 w-5 text-gray-500 dark:text-gray-300" />
+              </button>
+            </div>
+          ) : (
+            <Sidebar 
+              collections={collections}
+              selectedCollection={selectedCollection}
+              selectedRequest={selectedRequest}
+              onRequestSelect={handleRequestSelect}
+              onCollectionSelect={setSelectedCollection}
+              environments={environments}
+              onEnvironmentCreated={(name) => { setActiveEnvironment(name); localStorage.setItem('activeEnvironment', name); }}
+              onCollapse={() => setSidebarCollapsed(true)}
+            />
+          )}
+        </div>
+        {/* Full-height vertical divider with drag handle */}
+        <div
+          className="relative w-[1px] bg-gray-200 dark:bg-gray-700"
+          onMouseDown={() => {
+            setIsResizing(true);
+            const onMove = (ev: MouseEvent) => {
+              const newW = Math.max(48, Math.min(600, ev.clientX));
+              setSidebarWidth(newW);
+              if (newW <= 48) setSidebarCollapsed(true); else setSidebarCollapsed(false);
+            };
+            const onUp = () => {
+              setIsResizing(false);
+              document.removeEventListener('mousemove', onMove);
+              document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+          }}
+          title="Drag to resize sidebar"
+        >
+          <div className="absolute inset-y-0 right-[-3px] w-2 cursor-col-resize" />
+        </div>
         
         <div className="flex-1 flex flex-col">
           <RequestEditor 
@@ -142,6 +181,10 @@ function App() {
           />
         </div>
       </div>
+
+      <footer className="px-4 py-2 text-xs text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 fixed bottom-0 left-0 right-0 z-50">
+        DataHopper — Ready
+      </footer>
     </div>
   );
 }
