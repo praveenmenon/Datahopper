@@ -151,7 +151,7 @@ function App() {
         {/* Full-height vertical divider with drag handle */}
         <div
           className="relative w-[1px] bg-gray-200 dark:bg-gray-700"
-          onMouseDown={(e) => {
+          onMouseDown={() => {
             setIsResizing(true);
             const onMove = (ev: MouseEvent) => {
               const newW = Math.max(48, Math.min(600, ev.clientX));
